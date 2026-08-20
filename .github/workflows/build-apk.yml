@@ -36,28 +36,28 @@ jobs:
         env:
           EXPO_NO_TELEMETRY: 1
 
-      - name: Pin Gradle wrapper to 8.10.2
-        run: |
-          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.10.2-bin.zip|' \
-            android/gradle/wrapper/gradle-wrapper.properties
-          echo "--- gradle-wrapper.properties ---"
-          cat android/gradle/wrapper/gradle-wrapper.properties
+      - name: Show generated Gradle wrapper version
+        run: cat android/gradle/wrapper/gradle-wrapper.properties
 
-      - name: Patch gradle.properties for Kotlin compatibility
+      - name: Patch gradle.properties — upgrade Kotlin to 2.1.20 for KSP compatibility
         run: |
-          echo "" >> android/gradle.properties
-          echo "# Kotlin/KSP compatibility" >> android/gradle.properties
-          echo "android.suppressUnsupportedOptionWarnings=android.suppressUnsupportedOptionWarnings" >> android/gradle.properties
+          # Remove any existing kotlinVersion line then append the correct one
+          sed -i '/^kotlinVersion/d' android/gradle.properties
+          sed -i '/^kotlin.version/d' android/gradle.properties
+          echo "kotlinVersion=2.1.20" >> android/gradle.properties
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          echo "--- gradle.properties ---"
+          cat android/gradle.properties
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        run: ./gradlew assembleDebug --no-daemon --warning-mode none
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx4g -XX:MaxMetaspaceSize=512m"
-          JAVA_OPTS: "-Xmx512m"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
