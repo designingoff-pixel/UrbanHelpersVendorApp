@@ -22,8 +22,7 @@
         "backgroundColor": "#071522"
       },
       "package": "com.urbancaptain.vendor",
-      "edgeToEdgeEnabled": false,
-      "predictiveBackGestureEnabled": false
+      "edgeToEdgeEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png"

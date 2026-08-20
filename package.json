@@ -16,15 +16,15 @@
     "expo": "~54.0.36",
     "expo-linear-gradient": "~14.0.2",
     "expo-status-bar": "~2.2.3",
-    "react": "18.3.1",
-    "react-native": "0.76.9",
-    "react-native-safe-area-context": "~5.2.0",
-    "react-native-screens": "~4.4.0"
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.1.0",
+    "react-native-screens": "~4.5.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
-    "@types/react": "~18.3.0",
-    "typescript": "~5.3.3"
+    "@types/react": "~19.0.0",
+    "typescript": "~5.8.3"
   },
   "private": true
 }
