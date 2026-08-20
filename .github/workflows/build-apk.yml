@@ -26,8 +26,19 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Install dependencies
+      - name: Install base dependencies
         run: npm install --legacy-peer-deps
+        env:
+          EXPO_NO_TELEMETRY: 1
+
+      - name: Install Expo-certified versions of native packages
+        run: |
+          npx expo install \
+            react-native-screens \
+            react-native-safe-area-context \
+            expo-linear-gradient \
+            expo-status-bar \
+            @expo/vector-icons
         env:
           EXPO_NO_TELEMETRY: 1
 
@@ -36,10 +47,7 @@ jobs:
         env:
           EXPO_NO_TELEMETRY: 1
 
-      - name: Show build.gradle lines 1-30 (for diagnosis)
-        run: head -30 android/build.gradle
-
-      - name: Patch build.gradle — fix kotlinVersion in ext block
+      - name: Patch kotlinVersion in build.gradle
         run: |
           python3 - <<'EOF'
           import re
@@ -47,49 +55,30 @@ jobs:
           with open('android/build.gradle', 'r') as f:
               content = f.read()
 
-          print("=== ORIGINAL build.gradle ===")
-          print(content[:2000])
+          print("=== ORIGINAL lines 1-30 ===")
+          for i, line in enumerate(content.splitlines()[:30], 1):
+              print(f"{i}: {line}")
 
-          # Pattern 1: kotlinVersion = findProperty('android.kotlinVersion') ?: '...'
-          content = re.sub(
-              r"kotlinVersion\s*=\s*findProperty\(['\"]android\.kotlinVersion['\"]\)\s*\?:\s*['\"][^'\"]+['\"]",
-              "kotlinVersion = '2.1.20'",
+          # Replace any kotlinVersion assignment in the ext block
+          patched = re.sub(
+              r"(kotlinVersion\s*=\s*)(?:findProperty\(['\"][\w.]+['\"]\)\s*\?:\s*)?['\"][^'\"]*['\"]",
+              r"\g<1>'2.1.20'",
               content
           )
 
-          # Pattern 2: kotlinVersion = findProperty('kotlinVersion') ?: '...'
-          content = re.sub(
-              r"kotlinVersion\s*=\s*findProperty\(['\"]kotlinVersion['\"]\)\s*\?:\s*['\"][^'\"]+['\"]",
-              "kotlinVersion = '2.1.20'",
-              content
-          )
+          # If not found at all, inject into ext block
+          if 'kotlinVersion' not in patched:
+              patched = patched.replace('ext {', "ext {\n        kotlinVersion = '2.1.20'", 1)
 
-          # Pattern 3: kotlinVersion = '1.x.x' (hardcoded)
-          content = re.sub(
-              r"kotlinVersion\s*=\s*['\"]1\.[0-9]+\.[0-9]+['\"]",
-              "kotlinVersion = '2.1.20'",
-              content
-          )
-
-          # Pattern 4: if ext block doesn't define kotlinVersion at all, inject it
-          if 'kotlinVersion' not in content:
-              content = content.replace(
-                  'ext {',
-                  "ext {\n        kotlinVersion = '2.1.20'",
-                  1
-              )
-
-          print("\n=== PATCHED build.gradle ===")
-          print(content[:2000])
+          print("\n=== PATCHED lines 1-30 ===")
+          for i, line in enumerate(patched.splitlines()[:30], 1):
+              print(f"{i}: {line}")
 
           with open('android/build.gradle', 'w') as f:
-              f.write(content)
+              f.write(patched)
 
-          print("\nPatch complete.")
+          print("\nDone.")
           EOF
-
-      - name: Show patched build.gradle lines 1-30
-        run: head -30 android/build.gradle
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
