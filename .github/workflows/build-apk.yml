@@ -36,18 +36,22 @@ jobs:
         env:
           EXPO_NO_TELEMETRY: 1
 
-      - name: Show generated Gradle wrapper version
-        run: cat android/gradle/wrapper/gradle-wrapper.properties
-
-      - name: Patch gradle.properties — upgrade Kotlin to 2.1.20 for KSP compatibility
+      - name: Show generated gradle.properties
         run: |
-          # Remove any existing kotlinVersion line then append the correct one
-          sed -i '/^kotlinVersion/d' android/gradle.properties
-          sed -i '/^kotlin.version/d' android/gradle.properties
-          echo "kotlinVersion=2.1.20" >> android/gradle.properties
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
+          echo "--- gradle-wrapper.properties ---"
+          cat android/gradle/wrapper/gradle-wrapper.properties
           echo "--- gradle.properties ---"
+          cat android/gradle.properties
+
+      - name: Patch android.kotlinVersion in gradle.properties
+        run: |
+          # Remove any existing kotlinVersion entries (all variants)
+          sed -i '/^kotlinVersion/d' android/gradle.properties
+          sed -i '/^android\.kotlinVersion/d' android/gradle.properties
+          sed -i '/^kotlin\.version/d' android/gradle.properties
+          # Add the correct property key that expo's build.gradle ext block reads
+          echo "android.kotlinVersion=2.1.20" >> android/gradle.properties
+          echo "--- patched gradle.properties ---"
           cat android/gradle.properties
 
       - name: Make gradlew executable
