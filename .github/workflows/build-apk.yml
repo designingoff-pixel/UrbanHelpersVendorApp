@@ -28,20 +28,27 @@ jobs:
 
       - name: Install dependencies
         run: npm install --legacy-peer-deps
+        env:
+          EXPO_NO_TELEMETRY: 1
 
       - name: Generate Android project (expo prebuild)
         run: npx expo prebuild --platform android --clean
         env:
           EXPO_NO_TELEMETRY: 1
 
+      - name: Pin Gradle to 8.8 (compatible with Kotlin 1.9.x)
+        run: |
+          sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-8.8-bin.zip|' android/gradle/wrapper/gradle-wrapper.properties
+          cat android/gradle/wrapper/gradle-wrapper.properties
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --warning-mode none
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g"
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx3g -XX:MaxMetaspaceSize=512m"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
