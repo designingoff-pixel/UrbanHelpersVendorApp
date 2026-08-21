@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
+import {
+  View, Text, TouchableOpacity, StyleSheet,
+  SafeAreaView, Platform,
+} from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { View, StyleSheet } from 'react-native';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -18,75 +20,97 @@ import CompleteScreen from '../screens/CompleteScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
 
 import { Colors, Typography, Radius } from '../theme';
+import { store } from '../store/AppStore';
 
 const Stack = createNativeStackNavigator();
-const Tab = createBottomTabNavigator();
 
-function MainTabs() {
+// ── Custom Tab Bar (no Reanimated dependency) ──────────────────────────────
+const TABS = [
+  { name: 'Home',     icon: 'home',     iconOut: 'home-outline'     },
+  { name: 'Jobs',     icon: 'briefcase',iconOut: 'briefcase-outline' },
+  { name: 'Map',      icon: 'map',      iconOut: 'map-outline'       },
+  { name: 'Earnings', icon: 'wallet',   iconOut: 'wallet-outline'    },
+  { name: 'Profile',  icon: 'person',   iconOut: 'person-outline'    },
+];
+
+const TAB_SCREENS: Record<string, React.ComponentType<any>> = {
+  Home:     HomeScreen,
+  Jobs:     JobsScreen,
+  Map:      MapScreen,
+  Earnings: EarningsScreen,
+  Profile:  ProfileScreen,
+};
+
+function CustomTabBar({ activeTab, onTabPress }: { activeTab: string; onTabPress: (name: string) => void }) {
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: Colors.onSecondaryContainer,
-        tabBarInactiveTintColor: Colors.onSurfaceVariant,
-        tabBarLabelStyle: { ...Typography.labelMd, fontSize: 11, marginBottom: 4 },
-        tabBarIcon: ({ focused, color }) => {
-          const icons: Record<string, [string, string]> = {
-            Home:     ['home', 'home-outline'],
-            Jobs:     ['briefcase', 'briefcase-outline'],
-            Map:      ['map', 'map-outline'],
-            Earnings: ['wallet', 'wallet-outline'],
-            Profile:  ['person', 'person-outline'],
-          };
-          const [filled, outline] = icons[route.name] || ['ellipse', 'ellipse-outline'];
-          return (
-            <View style={[styles.tabIcon, focused && styles.tabIconActive]}>
-              <Ionicons name={(focused ? filled : outline) as any} size={22} color={color} />
+    <View style={tabStyles.bar}>
+      {TABS.map(tab => {
+        const active = activeTab === tab.name;
+        return (
+          <TouchableOpacity
+            key={tab.name}
+            style={tabStyles.item}
+            onPress={() => onTabPress(tab.name)}
+            activeOpacity={0.7}>
+            <View style={[tabStyles.iconWrap, active && tabStyles.iconWrapActive]}>
+              <Ionicons
+                name={(active ? tab.icon : tab.iconOut) as any}
+                size={22}
+                color={active ? Colors.onSecondaryContainer : Colors.onSurfaceVariant}
+              />
             </View>
-          );
-        },
-        tabBarBackground: () => <View style={styles.tabBackground} />,
-      })}>
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Jobs" component={JobsScreen} />
-      <Tab.Screen
-        name="Map"
-        component={MapScreen}
-        initialParams={{ jobId: 'JOB001' }}
-        listeners={({ navigation }) => ({
-          tabPress: e => {
-            e.preventDefault();
-            const { store } = require('../store/AppStore');
-            const activeJob = store.jobs.find((j: any) =>
-              ['ACCEPTED','NAVIGATING','ARRIVED','OTP_PENDING','CUSTOMER_VERIFIED',
-               'SERVICE_STARTED','RECORDING_ACTIVE'].includes(j.status)
-            );
-            if (activeJob) navigation.navigate('Map', { jobId: activeJob.jobId });
-            else navigation.navigate('Jobs');
-          },
-        })}
-      />
-      <Tab.Screen name="Earnings" component={EarningsScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
-    </Tab.Navigator>
+            <Text style={[tabStyles.label, active && tabStyles.labelActive]}>
+              {tab.name}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 
+// ── Main Tabs container (no @react-navigation/bottom-tabs) ─────────────────
+function MainTabsScreen({ navigation }: any) {
+  const [activeTab, setActiveTab] = useState('Home');
+
+  const handleTabPress = (name: string) => {
+    if (name === 'Map') {
+      const activeJob = store.jobs.find(j =>
+        ['ACCEPTED','NAVIGATING','ARRIVED','OTP_PENDING','CUSTOMER_VERIFIED',
+         'SERVICE_STARTED','RECORDING_ACTIVE'].includes(j.status)
+      );
+      if (activeJob) {
+        navigation.navigate('Map', { jobId: activeJob.jobId });
+        return;
+      }
+      setActiveTab('Jobs');
+      return;
+    }
+    setActiveTab(name);
+  };
+
+  const ActiveScreen = TAB_SCREENS[activeTab] ?? HomeScreen;
+
+  return (
+    <View style={{ flex: 1, backgroundColor: Colors.midnightNavy }}>
+      <View style={{ flex: 1 }}>
+        <ActiveScreen navigation={navigation} route={{ params: {} }} />
+      </View>
+      <CustomTabBar activeTab={activeTab} onTabPress={handleTabPress} />
+    </View>
+  );
+}
+
+// ── Root Navigator ─────────────────────────────────────────────────────────
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          // Use 'default' — avoids triggering reanimated worklet calls
-          animation: 'default',
-        }}>
-        <Stack.Screen name="Login"      component={LoginScreen} />
-        <Stack.Screen name="MainTabs"   component={MainTabs} />
-        <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
-        <Stack.Screen name="Map"        component={MapScreen} />
-        <Stack.Screen name="OTP"        component={OTPScreen} />
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Login"         component={LoginScreen} />
+        <Stack.Screen name="MainTabs"      component={MainTabsScreen} />
+        <Stack.Screen name="JobDetails"    component={JobDetailsScreen} />
+        <Stack.Screen name="Map"           component={MapScreen} />
+        <Stack.Screen name="OTP"           component={OTPScreen} />
         <Stack.Screen
           name="Service"
           component={ServiceScreen}
@@ -103,24 +127,36 @@ export default function AppNavigator() {
   );
 }
 
-const styles = StyleSheet.create({
-  tabBar: {
+const tabStyles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
     backgroundColor: Colors.surfaceContainerLowest,
     borderTopWidth: 1,
     borderTopColor: Colors.outlineVariant,
-    height: 76,
-    paddingBottom: 10,
+    height: Platform.OS === 'ios' ? 82 : 68,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 8,
     paddingTop: 6,
   },
-  tabBackground: {
+  item: {
     flex: 1,
-    backgroundColor: Colors.surfaceContainerLowest,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
   },
-  tabIcon: {
-    padding: 6,
+  iconWrap: {
+    padding: 5,
     borderRadius: Radius.md,
   },
-  tabIconActive: {
+  iconWrapActive: {
     backgroundColor: Colors.secondaryContainer,
+  },
+  label: {
+    ...Typography.labelMd,
+    fontSize: 10,
+    color: Colors.onSurfaceVariant,
+  },
+  labelActive: {
+    color: Colors.onSecondaryContainer,
+    fontWeight: '700',
   },
 });

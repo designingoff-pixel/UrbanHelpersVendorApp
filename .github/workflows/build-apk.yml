@@ -36,7 +36,6 @@ jobs:
           npx expo install \
             react-native-screens \
             react-native-safe-area-context \
-            react-native-reanimated \
             expo-linear-gradient \
             expo-status-bar \
             @expo/vector-icons
