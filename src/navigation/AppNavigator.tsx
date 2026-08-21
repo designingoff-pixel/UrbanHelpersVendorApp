@@ -31,7 +31,7 @@ function MainTabs() {
         tabBarActiveTintColor: Colors.onSecondaryContainer,
         tabBarInactiveTintColor: Colors.onSurfaceVariant,
         tabBarLabelStyle: { ...Typography.labelMd, fontSize: 11, marginBottom: 4 },
-        tabBarIcon: ({ focused, color, size }) => {
+        tabBarIcon: ({ focused, color }) => {
           const icons: Record<string, [string, string]> = {
             Home:     ['home', 'home-outline'],
             Jobs:     ['briefcase', 'briefcase-outline'],
@@ -46,26 +46,25 @@ function MainTabs() {
             </View>
           );
         },
-        tabBarBackground: () => (
-          <View style={styles.tabBackground} />
-        ),
+        tabBarBackground: () => <View style={styles.tabBackground} />,
       })}>
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Jobs" component={JobsScreen} />
-      <Tab.Screen name="Map"
+      <Tab.Screen
+        name="Map"
         component={MapScreen}
         initialParams={{ jobId: 'JOB001' }}
         listeners={({ navigation }) => ({
           tabPress: e => {
             e.preventDefault();
-            // Navigate to map only if there's an active job
             const { store } = require('../store/AppStore');
             const activeJob = store.jobs.find((j: any) =>
-              ['ACCEPTED','NAVIGATING','ARRIVED','OTP_PENDING','CUSTOMER_VERIFIED','SERVICE_STARTED','RECORDING_ACTIVE'].includes(j.status)
+              ['ACCEPTED','NAVIGATING','ARRIVED','OTP_PENDING','CUSTOMER_VERIFIED',
+               'SERVICE_STARTED','RECORDING_ACTIVE'].includes(j.status)
             );
             if (activeJob) navigation.navigate('Map', { jobId: activeJob.jobId });
             else navigation.navigate('Jobs');
-          }
+          },
         })}
       />
       <Tab.Screen name="Earnings" component={EarningsScreen} />
@@ -77,14 +76,27 @@ function MainTabs() {
 export default function AppNavigator() {
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          // Use 'default' — avoids triggering reanimated worklet calls
+          animation: 'default',
+        }}>
+        <Stack.Screen name="Login"      component={LoginScreen} />
+        <Stack.Screen name="MainTabs"   component={MainTabs} />
         <Stack.Screen name="JobDetails" component={JobDetailsScreen} />
-        <Stack.Screen name="Map" component={MapScreen} options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="OTP" component={OTPScreen} options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="Service" component={ServiceScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
-        <Stack.Screen name="Complete" component={CompleteScreen} options={{ animation: 'fade', gestureEnabled: false }} />
+        <Stack.Screen name="Map"        component={MapScreen} />
+        <Stack.Screen name="OTP"        component={OTPScreen} />
+        <Stack.Screen
+          name="Service"
+          component={ServiceScreen}
+          options={{ gestureEnabled: false }}
+        />
+        <Stack.Screen
+          name="Complete"
+          component={CompleteScreen}
+          options={{ gestureEnabled: false }}
+        />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
@@ -94,14 +106,19 @@ export default function AppNavigator() {
 const styles = StyleSheet.create({
   tabBar: {
     backgroundColor: Colors.surfaceContainerLowest,
-    borderTopWidth: 1, borderTopColor: Colors.outlineVariant,
-    height: 76, paddingBottom: 10, paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: Colors.outlineVariant,
+    height: 76,
+    paddingBottom: 10,
+    paddingTop: 6,
   },
   tabBackground: {
-    flex: 1, backgroundColor: Colors.surfaceContainerLowest,
+    flex: 1,
+    backgroundColor: Colors.surfaceContainerLowest,
   },
   tabIcon: {
-    padding: 6, borderRadius: Radius.md,
+    padding: 6,
+    borderRadius: Radius.md,
   },
   tabIconActive: {
     backgroundColor: Colors.secondaryContainer,
