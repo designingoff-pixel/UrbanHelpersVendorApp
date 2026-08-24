@@ -78,14 +78,15 @@ jobs:
 
       - name: Bundle JavaScript (embed into APK)
         run: |
-          npx react-native bundle \
+          npx expo export:embed \
             --platform android \
-            --dev false \
             --entry-file index.ts \
             --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res
+            --assets-dest android/app/src/main/res \
+            --dev false
         env:
           NODE_ENV: production
+          EXPO_NO_TELEMETRY: 1
 
       - name: Verify bundle was created
         run: |
@@ -97,7 +98,6 @@ jobs:
         run: ./gradlew assembleDebug --no-daemon --warning-mode none
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx4g -XX:MaxMetaspaceSize=512m"
-          BUNDLE_SKIPPED: true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
