@@ -55,39 +55,49 @@ jobs:
           with open('android/build.gradle', 'r') as f:
               content = f.read()
 
-          print("=== ORIGINAL lines 1-30 ===")
-          for i, line in enumerate(content.splitlines()[:30], 1):
-              print(f"{i}: {line}")
-
-          # Replace any kotlinVersion assignment in the ext block
           patched = re.sub(
               r"(kotlinVersion\s*=\s*)(?:findProperty\(['\"][\w.]+['\"]\)\s*\?:\s*)?['\"][^'\"]*['\"]",
               r"\g<1>'2.1.20'",
               content
           )
 
-          # If not found at all, inject into ext block
           if 'kotlinVersion' not in patched:
               patched = patched.replace('ext {', "ext {\n        kotlinVersion = '2.1.20'", 1)
-
-          print("\n=== PATCHED lines 1-30 ===")
-          for i, line in enumerate(patched.splitlines()[:30], 1):
-              print(f"{i}: {line}")
 
           with open('android/build.gradle', 'w') as f:
               f.write(patched)
 
-          print("\nDone.")
+          print("kotlinVersion patched to 2.1.20")
           EOF
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
+
+      - name: Create assets directory for JS bundle
+        run: mkdir -p android/app/src/main/assets
+
+      - name: Bundle JavaScript (embed into APK)
+        run: |
+          npx react-native bundle \
+            --platform android \
+            --dev false \
+            --entry-file index.ts \
+            --bundle-output android/app/src/main/assets/index.android.bundle \
+            --assets-dest android/app/src/main/res
+        env:
+          NODE_ENV: production
+
+      - name: Verify bundle was created
+        run: |
+          ls -lh android/app/src/main/assets/
+          echo "Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
 
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --warning-mode none
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx4g -XX:MaxMetaspaceSize=512m"
+          BUNDLE_SKIPPED: true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
