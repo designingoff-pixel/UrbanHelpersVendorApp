@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { store } from '../store/AppStore';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
+import { updateBookingStatus } from '../services/firestoreService';
 
 function formatTime(secs: number) {
   const h = Math.floor(secs / 3600);
@@ -24,6 +25,11 @@ export default function ServiceScreen({ route, navigation }: any) {
 
   useEffect(() => {
     const unsub = store.subscribe(() => forceUpdate(n => n + 1));
+
+    // Notify customer: service started
+    const job = store.getJob(jobId);
+    if (job) updateBookingStatus(job.bookingId, 'in_progress');
+
     // Start timer
     timerRef.current = setInterval(() => { if (!paused) store.tickRecording(); }, 1000);
     return () => {
@@ -51,6 +57,9 @@ export default function ServiceScreen({ route, navigation }: any) {
     if (timerRef.current) clearInterval(timerRef.current);
     store.completeJob(jobId);
     setShowStopSheet(false);
+    // Notify customer: service completed
+    const job = store.getJob(jobId);
+    if (job) updateBookingStatus(job.bookingId, 'completed');
     navigation.navigate('Complete', { jobId });
   };
 
