@@ -12,9 +12,22 @@
       "resizeMode": "contain",
       "backgroundColor": "#071522"
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Urban Captain needs your location to show customers where you are.",
+          "locationWhenInUsePermission": "Urban Captain needs your location to navigate to customers."
+        }
+      ]
+    ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.urbancaptain.vendor"
+      "bundleIdentifier": "com.urbancaptain.vendor",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Urban Captain needs your location to navigate to customers.",
+        "NSLocationAlwaysUsageDescription": "Urban Captain uses your location to show customers where you are."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -22,7 +35,13 @@
         "backgroundColor": "#071522"
       },
       "package": "com.urbancaptain.vendor",
-      "edgeToEdgeEnabled": false
+      "edgeToEdgeEnabled": false,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "FOREGROUND_SERVICE",
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

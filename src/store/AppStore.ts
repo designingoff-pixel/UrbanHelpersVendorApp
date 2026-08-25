@@ -11,15 +11,87 @@ class AppStore {
   currentJobId: string | null = null;
   recordingSeconds: number = 0;
   isRecording: boolean = false;
+
+  // ── Firebase identity ──────────────────────────────────────────────────
+  firebaseUid: string | null = null;   // Firebase Auth UID (= vendorId in Firestore)
+  vendorId: string | null = null;      // same value, explicit alias for clarity
+  isFirebaseReady: boolean = false;    // true once auth + Firestore listener running
+
   private _listeners: Set<Listener> = new Set();
 
-  subscribe(fn: Listener) {
+  subscribe(fn: Listener): () => void {
     this._listeners.add(fn);
-    return () => this._listeners.delete(fn);
+    return () => { this._listeners.delete(fn); };
   }
 
   private notify() {
     this._listeners.forEach(fn => fn());
+  }
+
+  // ── Called by LoginScreen after Firebase Auth succeeds ─────────────────
+  setFirebaseUser(uid: string, displayName: string, mobile: string) {
+    this.firebaseUid    = uid;
+    this.vendorId       = uid;
+    this.isFirebaseReady = true;
+    // Patch vendor identity fields
+    this.vendor.vendorId = uid;
+    if (displayName) this.vendor.name = displayName;
+    if (mobile)      this.vendor.mobile = mobile;
+    this.notify();
+  }
+
+  // ── Called by HomeScreen Firestore listener to sync live jobs ──────────
+  mergeFirestoreJobs(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]) {
+    const mapped: Job[] = firestoreJobs.map(fb => {
+      // Try to find existing local job to preserve checklist progress
+      const existing = this.jobs.find(j => j.jobId === fb.id);
+      return {
+        jobId:               fb.id,
+        customerId:          fb.customerId,
+        customerName:        fb.customerName,
+        customerPhone:       '',
+        serviceType:         fb.serviceCategory,
+        serviceName:         fb.serviceCategory,
+        assignmentType:      'CUSTOMER_REQUEST' as const,
+        status:              this._mapStatus(fb.status),
+        date:                new Date(fb.scheduledAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+        time:                new Date(fb.scheduledAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+        address:             fb.address,
+        latitude:            0,
+        longitude:           0,
+        distance:            '–',
+        estimatedDuration:   '1 hr',
+        customerInstructions:'',
+        bookingId:           fb.id,
+        paymentStatus:       fb.paymentStatus === 'paid' ? 'PAID' : 'PENDING',
+        vendorEarnings:      Math.round(fb.price * 0.8),
+        otp:                 fb.otp ?? '',
+        checklist:           existing?.checklist ?? [],
+        checklistDone:       existing?.checklistDone ?? [],
+        createdAt:           Date.now(),
+      } as Job;
+    });
+
+    // Merge: replace matching jobs, keep local-only jobs (mock), append new
+    const incoming = new Set(mapped.map(j => j.jobId));
+    const local    = this.jobs.filter(j => !incoming.has(j.jobId));
+    this.jobs      = [...mapped, ...local];
+    this.notify();
+  }
+
+  // Map Firestore status string → vendor app JobStatus
+  private _mapStatus(s: string): JobStatus {
+    const map: Record<string, JobStatus> = {
+      requested:   'NEW_REQUEST',
+      assigned:    'ACCEPTED',
+      accepted:    'ACCEPTED',
+      en_route:    'NAVIGATING',
+      arrived:     'ARRIVED',
+      in_progress: 'SERVICE_STARTED',
+      completed:   'COMPLETED',
+      cancelled:   'CANCELLED',
+    };
+    return map[s] ?? 'NEW_REQUEST';
   }
 
   getJob(jobId: string): Job | undefined {

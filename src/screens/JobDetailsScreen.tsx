@@ -10,6 +10,12 @@ import StatusBadge from '../components/StatusBadge';
 import { Job } from '../data/types';
 import { SERVICE_ICONS } from '../data/mockData';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
+import {
+  updateBookingStatus,
+  acceptJob,
+  rejectJob,
+  BookingStatus,
+} from '../services/firestoreService';
 
 function getPrimaryAction(job: Job): { label: string; icon: string; action: () => void; colors: [string,string] } | null {
   const nav = (screen: string, params?: any) => ({ screen, params });
@@ -46,36 +52,55 @@ export default function JobDetailsScreen({ route, navigation }: any) {
   const primaryAction = getPrimaryAction(job);
   const secondaryLabel = getSecondaryLabel(job);
 
-  const handlePrimary = () => {
+  const handlePrimary = async () => {
     switch (job.status) {
       case 'NEW_REQUEST':
-        store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
+        try {
+          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name);
+          store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
+        } catch (e: any) { Alert.alert('Error', e.message); }
         break;
+
       case 'ACCEPTED':
       case 'UPCOMING':
+        await updateBookingStatus(job.bookingId, 'en_route').catch(() => {});
         store.updateJobStatus(jobId, 'NAVIGATING');
         navigation.navigate('Map', { jobId });
         return;
+
       case 'ADMIN_ASSIGNED':
-        store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
+        try {
+          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name);
+          store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
+        } catch (e: any) { Alert.alert('Error', e.message); }
         break;
+
       case 'NAVIGATING':
-        store.updateJobStatus(jobId, 'ARRIVED', { arrivedAt: Date.now() });
-        Alert.alert("You've Arrived!", 'Please verify the customer OTP.');
+        try {
+          await updateBookingStatus(job.bookingId, 'arrived');
+          store.updateJobStatus(jobId, 'ARRIVED', { arrivedAt: Date.now() });
+          Alert.alert("You've Arrived!", 'Please verify the customer OTP.');
+        } catch (e: any) { Alert.alert('Error', e.message); }
         break;
+
       case 'ARRIVED':
       case 'OTP_PENDING':
+        await updateBookingStatus(job.bookingId, 'arrived').catch(() => {});
         store.updateJobStatus(jobId, 'OTP_PENDING');
         navigation.navigate('OTP', { jobId });
         return;
+
       case 'CUSTOMER_VERIFIED':
+        // in_progress is written by OTPScreen's verifyOTP call — just navigate
         store.startRecording(jobId);
         navigation.navigate('Service', { jobId });
         return;
+
       case 'SERVICE_STARTED':
       case 'RECORDING_ACTIVE':
         navigation.navigate('Service', { jobId });
         return;
+
       case 'COMPLETED':
         navigation.navigate('Complete', { jobId });
         return;
@@ -85,7 +110,18 @@ export default function JobDetailsScreen({ route, navigation }: any) {
   const handleSecondary = () => {
     Alert.alert('Reject Job', 'Are you sure you want to reject this job?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Reject', style: 'destructive', onPress: () => { store.updateJobStatus(jobId, 'REJECTED'); navigation.goBack(); } },
+      {
+        text: 'Reject', style: 'destructive',
+        onPress: async () => {
+          try {
+            await rejectJob(job.bookingId);
+            store.updateJobStatus(jobId, 'REJECTED');
+            navigation.goBack();
+          } catch (e: any) {
+            Alert.alert('Error', e.message);
+          }
+        },
+      },
     ]);
   };
 
