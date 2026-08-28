@@ -41,6 +41,7 @@ jobs:
 
       - name: Build APK
         run: |
+          sed -i '/enableBundleCompression/d' android/app/build.gradle
           cd android
           ./gradlew assembleRelease
 
