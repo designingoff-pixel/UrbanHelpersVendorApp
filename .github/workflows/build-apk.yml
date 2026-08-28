@@ -1,9 +1,8 @@
-name: Build Android APK
+name: Build Android APK — Urban Captain Vendor
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -12,10 +11,10 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -23,10 +22,10 @@ jobs:
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
+          distribution: zulu
           java-version: '17'
 
-      - name: Create .env file with Firebase config
+      - name: Create .env
         run: |
           cat > .env << 'EOF'
           EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyDhkD-wS-wCc2ZlMbHSNTEp3MFxSrLIUQY
@@ -37,57 +36,29 @@ jobs:
           EXPO_PUBLIC_FIREBASE_APP_ID=1:843343743619:web:a0c09ea15fa85780d6a9b6
           EOF
 
-      - name: Install base dependencies
+      - name: Install dependencies
         run: npm install --legacy-peer-deps
         env:
-          EXPO_NO_TELEMETRY: 1
+          EXPO_NO_TELEMETRY: '1'
 
-      - name: Install Expo-certified versions of native packages
-        run: |
-          npx expo install \
-            react-native-screens \
-            react-native-safe-area-context \
-            expo-linear-gradient \
-            expo-status-bar \
-            @expo/vector-icons
+      - name: Expo Prebuild (generate Android project)
+        run: npx expo prebuild --platform android --clean --no-install
         env:
-          EXPO_NO_TELEMETRY: 1
+          EXPO_NO_TELEMETRY: '1'
 
-      - name: Generate Android project (expo prebuild)
-        run: npx expo prebuild --platform android --clean
-        env:
-          EXPO_NO_TELEMETRY: 1
-
-      - name: Patch kotlinVersion in build.gradle
+      - name: Patch Kotlin version
         run: |
-          python3 - <<'EOF'
-          import re
-
-          with open('android/build.gradle', 'r') as f:
-              content = f.read()
-
-          patched = re.sub(
-              r"(kotlinVersion\s*=\s*)(?:findProperty\(['\"][\w.]+['\"]\)\s*\?:\s*)?['\"][^'\"]*['\"]",
-              r"\g<1>'2.1.20'",
-              content
-          )
-
-          if 'kotlinVersion' not in patched:
-              patched = patched.replace('ext {', "ext {\n        kotlinVersion = '2.1.20'", 1)
-
-          with open('android/build.gradle', 'w') as f:
-              f.write(patched)
-
-          print("kotlinVersion patched to 2.1.20")
-          EOF
+          sed -i 's/kotlinVersion = .*/kotlinVersion = "2.1.20"/' android/build.gradle || true
+          grep -q 'kotlinVersion' android/build.gradle || \
+            sed -i 's/ext {/ext {\n        kotlinVersion = "2.1.20"/' android/build.gradle
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Create assets directory for JS bundle
+      - name: Create JS bundle output directory
         run: mkdir -p android/app/src/main/assets
 
-      - name: Bundle JavaScript (embed into APK)
+      - name: Bundle JS
         run: |
           npx expo export:embed \
             --platform android \
@@ -97,22 +68,20 @@ jobs:
             --dev false
         env:
           NODE_ENV: production
-          EXPO_NO_TELEMETRY: 1
-
-      - name: Verify bundle was created
-        run: |
-          ls -lh android/app/src/main/assets/
-          echo "Bundle size: $(wc -c < android/app/src/main/assets/index.android.bundle) bytes"
+          EXPO_NO_TELEMETRY: '1'
 
       - name: Build Debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --warning-mode none
         env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2 -Xmx4g -XX:MaxMetaspaceSize=512m"
+          GRADLE_OPTS: >-
+            -Dorg.gradle.daemon=false
+            -Dorg.gradle.workers.max=2
+            -Xmx4g
 
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: UrbanCaptain-Vendor-debug-apk
+          name: UrbanCaptain-Vendor-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14

@@ -1,18 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Urban Captain Vendor App — Firebase
-// Same project as customer app + admin dashboard: urban-helpers-admin
-//
-// Uses initializeAuth with AsyncStorage persistence (required for React Native).
-// getAuth() uses browser localStorage which crashes on Android.
+// Uses getAuth() only — no initializeAuth/AsyncStorage.
+// initializeAuth + getReactNativePersistence is broken in firebase v12
+// when imported from "firebase/auth" (browser bundle is resolved instead).
+// getAuth() is safe — sessions are kept in memory during app lifetime.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { Auth, getAuth, initializeAuth } from "firebase/auth";
-// @ts-expect-error — Metro resolves the RN implementation at runtime via
-// the "react-native" package.json condition; TypeScript only sees browser types
-import { getReactNativePersistence } from "firebase/auth";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const firebaseConfig = {
   apiKey:            "AIzaSyDhkD-wS-wCc2ZlMbHSNTEp3MFxSrLIUQY",
@@ -25,16 +21,5 @@ const firebaseConfig = {
 
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// initializeAuth throws if called more than once (e.g. Fast Refresh).
-// Fall back to getAuth() in that case.
-let auth: Auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: getReactNativePersistence(AsyncStorage),
-  });
-} catch {
-  auth = getAuth(app);
-}
-
-export { auth };
-export const db = getFirestore(app);
+export const auth = getAuth(app);
+export const db   = getFirestore(app);

@@ -3,7 +3,6 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   Alert, Linking, Platform, ActivityIndicator,
 } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -14,106 +13,73 @@ import {
   updateVendorLocation,
   updateBookingStatus,
 } from '../services/firestoreService';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
+import { Colors, Typography, Spacing, Radius } from '../theme';
+
+// NOTE: MapView (react-native-maps) is intentionally NOT imported here.
+// It requires a Google Maps API key in the APK build.
+// Without one the app crashes on this screen.
+// All real-time tracking works through Firestore + expo-location.
+// To enable the real map, see GOOGLE_MAPS_API_KEY_GUIDE.md
 
 const GPS_INTERVAL_MS = 5000;
 
-// ── Haversine distance (km) ───────────────────────────────────────────────────
-function getDistanceKm(
-  lat1: number, lng1: number,
-  lat2: number, lng2: number,
-): number {
-  const R    = 6371;
+function getDistanceKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLng = ((lng2 - lng1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
     Math.sin(dLng / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function formatETA(km: number): string {
-  const mins = Math.max(1, Math.round((km / 25) * 60));
-  if (mins < 60) return `${mins} min`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+function fmtETA(km: number): string {
+  const m = Math.max(1, Math.round((km / 25) * 60));
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-function formatDist(km: number): string {
+function fmtDist(km: number): string {
   return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 export default function MapScreen({ route, navigation }: any) {
   const { jobId } = route.params ?? {};
 
-  const [, forceUpdate]           = useState(0);
+  const [, forceUpdate] = useState(0);
   useEffect(() => store.subscribe(() => forceUpdate(n => n + 1)), []);
 
   const job = store.getJob(jobId);
 
-  // ── Vendor live coords ────────────────────────────────────────────────────
-  const [vendorCoords, setVendorCoords] = useState<{
-    latitude: number; longitude: number; heading: number;
-  } | null>(null);
+  const [vendorCoords,   setVendorCoords]   = useState<{ lat: number; lng: number } | null>(null);
+  const [customerCoords, setCustomerCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [etaText,        setEtaText]        = useState('Calculating…');
+  const [distText,       setDistText]       = useState('');
+  const [gpsGranted,     setGpsGranted]     = useState<boolean | null>(null);
+  const [navigating,     setNavigating]     = useState(false);
+  const [arrived,        setArrived]        = useState(false);
 
-  // ── Customer coords from Firestore booking ────────────────────────────────
-  const [customerCoords, setCustomerCoords] = useState<{
-    latitude: number; longitude: number;
-  } | null>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── ETA / distance ────────────────────────────────────────────────────────
-  const [etaText,  setEtaText]  = useState('Calculating…');
-  const [distText, setDistText] = useState('');
-
-  // ── UI state ──────────────────────────────────────────────────────────────
-  const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
-  const [navigating, setNavigating]           = useState(false);
-  const [arrived,    setArrived]              = useState(false);
-
-  const locationTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mapRef        = useRef<MapView>(null);
-
-  // ── Read customer coords from Firestore booking doc ───────────────────────
+  // Read customer coords from Firestore
   useEffect(() => {
     if (!job?.bookingId) return;
-
-    const unsub = onSnapshot(doc(db, 'bookings', job.bookingId), (snap) => {
+    return onSnapshot(doc(db, 'bookings', job.bookingId), (snap) => {
       if (!snap.exists()) return;
-      const data = snap.data();
-      if (data?.customerLat && data?.customerLng) {
-        setCustomerCoords({
-          latitude:  data.customerLat,
-          longitude: data.customerLng,
-        });
-      }
+      const d = snap.data();
+      if (d?.customerLat && d?.customerLng)
+        setCustomerCoords({ lat: d.customerLat, lng: d.customerLng });
     });
-    return unsub;
   }, [job?.bookingId]);
 
-  // ── Recalculate ETA when vendor moves ─────────────────────────────────────
+  // Recalculate ETA when vendor moves
   useEffect(() => {
     if (!vendorCoords || !customerCoords) return;
-    const km = getDistanceKm(
-      vendorCoords.latitude, vendorCoords.longitude,
-      customerCoords.latitude, customerCoords.longitude,
-    );
-    setEtaText(formatETA(km));
-    setDistText(formatDist(km));
+    const km = getDistanceKm(vendorCoords.lat, vendorCoords.lng, customerCoords.lat, customerCoords.lng);
+    setEtaText(fmtETA(km));
+    setDistText(fmtDist(km));
   }, [vendorCoords, customerCoords]);
 
-  // ── Fit map to show both markers ──────────────────────────────────────────
-  useEffect(() => {
-    if (!vendorCoords || !customerCoords) return;
-    mapRef.current?.fitToCoordinates(
-      [vendorCoords, customerCoords],
-      { edgePadding: { top: 80, right: 50, bottom: 340, left: 50 }, animated: true },
-    );
-  }, [!!vendorCoords, !!customerCoords]);
-
-  // ── Request location + start GPS broadcast ────────────────────────────────
+  // Start GPS broadcast
   useEffect(() => {
     if (!job || !store.vendorId) return;
     let active = true;
@@ -121,290 +87,222 @@ export default function MapScreen({ route, navigation }: any) {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (!active) return;
-
-      if (status !== 'granted') {
-        setLocationGranted(false);
-        Alert.alert(
-          'Location Required',
-          'Please allow location so the customer can track you in real time.',
-        );
-        return;
-      }
-      setLocationGranted(true);
+      if (status !== 'granted') { setGpsGranted(false); return; }
+      setGpsGranted(true);
 
       const broadcast = async () => {
         try {
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.High,
-          });
-          const { latitude, longitude, heading, speed } = pos.coords;
-
-          const newCoords = { latitude, longitude, heading: heading ?? 0 };
-          setVendorCoords(newCoords);
-
-          // Animate camera to vendor unless both markers visible
-          if (!customerCoords) {
-            mapRef.current?.animateCamera({
-              center: { latitude, longitude },
-              zoom: 16,
-            });
-          }
-
-          await updateVendorLocation(
-            store.vendorId!,
-            latitude,
-            longitude,
-            heading ?? 0,
-            speed ? Math.round(speed * 3.6) : 0,
-          );
-        } catch {
-          // silent — retry next tick
-        }
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          const { latitude: lat, longitude: lng, heading, speed } = pos.coords;
+          setVendorCoords({ lat, lng });
+          await updateVendorLocation(store.vendorId!, lat, lng, heading ?? 0, speed ? Math.round(speed * 3.6) : 0);
+        } catch { /* silent retry */ }
       };
 
       broadcast();
-      locationTimer.current = setInterval(broadcast, GPS_INTERVAL_MS);
-
+      timer.current = setInterval(broadcast, GPS_INTERVAL_MS);
       await updateBookingStatus(job.bookingId, 'en_route').catch(() => {});
       store.updateJobStatus(jobId, 'NAVIGATING');
     })();
 
     return () => {
       active = false;
-      if (locationTimer.current) {
-        clearInterval(locationTimer.current);
-        locationTimer.current = null;
-      }
+      if (timer.current) { clearInterval(timer.current); timer.current = null; }
     };
   }, [job?.bookingId, store.vendorId]);
 
-  if (!job) return null;
+  if (!job) {
+    return (
+      <View style={[st.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Ionicons name="alert-circle-outline" size={48} color={Colors.onSurfaceVariant} />
+        <Text style={{ color: Colors.onSurfaceVariant, marginTop: 12 }}>Job not found</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginTop: 20 }}>
+          <Text style={{ color: Colors.primary }}>Go Back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
-  // ── Open Google Maps navigation ───────────────────────────────────────────
-  const handleStartNavigation = async () => {
+  const handleNavigation = async () => {
     setNavigating(true);
     const dest = customerCoords
-      ? `${customerCoords.latitude},${customerCoords.longitude}`
+      ? `${customerCoords.lat},${customerCoords.lng}`
       : encodeURIComponent(job.address);
     const url = Platform.OS === 'ios'
       ? `maps://app?daddr=${dest}&dirflg=d`
       : `google.navigation:q=${dest}&mode=d`;
     const fallback = `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`;
-    const canOpen = await Linking.canOpenURL(url);
-    Linking.openURL(canOpen ? url : fallback);
+    Linking.openURL(await Linking.canOpenURL(url) ? url : fallback);
   };
 
-  // ── I've Arrived ──────────────────────────────────────────────────────────
   const handleArrived = async () => {
     try {
       await updateBookingStatus(job.bookingId, 'arrived');
       store.updateJobStatus(jobId, 'ARRIVED', { arrivedAt: Date.now() });
       setArrived(true);
-      if (locationTimer.current) {
-        clearInterval(locationTimer.current);
-        locationTimer.current = null;
-      }
+      if (timer.current) { clearInterval(timer.current); timer.current = null; }
       Alert.alert("You've Arrived! 🎯", 'Ask the customer for their OTP.', [
         { text: 'Verify OTP', onPress: () => navigation.navigate('OTP', { jobId }) },
       ]);
-    } catch (e: any) {
-      Alert.alert('Error', e.message ?? 'Could not update status.');
-    }
+    } catch (e: any) { Alert.alert('Error', e.message); }
   };
 
-  const handleCall = () =>
-    Linking.openURL(`tel:${job.customerPhone || '+919999999999'}`).catch(() =>
-      Alert.alert('Call', `Calling ${job.customerName}…`),
-    );
-
-  const gpsColor =
-    locationGranted === null ? '#facc15' :
-    locationGranted          ? '#4ade80' : '#ef4444';
-
-  const initialRegion = vendorCoords
-    ? { ...vendorCoords, latitudeDelta: 0.02, longitudeDelta: 0.02 }
-    : customerCoords
-      ? { ...customerCoords, latitudeDelta: 0.02, longitudeDelta: 0.02 }
-      : { latitude: 20.5937, longitude: 78.9629, latitudeDelta: 10, longitudeDelta: 10 };
+  const gpsColor = gpsGranted === null ? '#facc15' : gpsGranted ? '#4ade80' : '#ef4444';
+  const progress = vendorCoords && customerCoords
+    ? Math.max(0, Math.min(100, 100 - (getDistanceKm(vendorCoords.lat, vendorCoords.lng, customerCoords.lat, customerCoords.lng) / 5) * 100))
+    : 0;
 
   return (
-    <View style={styles.container}>
+    <View style={st.container}>
 
-      {/* ── Real MapView ──────────────────────────────────────────── */}
-      <MapView
-        ref={mapRef}
-        style={styles.map}
-        provider={PROVIDER_GOOGLE}
-        initialRegion={initialRegion}
-        showsUserLocation={false}
-        showsMyLocationButton={false}
-        showsTraffic={true}
-        showsCompass={false}
-        rotateEnabled={false}
-      >
-        {/* Vendor marker — updates every 5s */}
-        {vendorCoords && (
-          <Marker
-            coordinate={vendorCoords}
-            title="You"
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <View style={styles.vendorMarker}>
-              <LinearGradient
-                colors={['#2563eb', '#06b6d4']}
-                style={styles.vendorMarkerInner}
-              >
-                <Ionicons name="car" size={18} color="white" />
-              </LinearGradient>
-            </View>
-          </Marker>
-        )}
-
-        {/* Customer home marker */}
-        {customerCoords && (
-          <Marker
-            coordinate={customerCoords}
-            title={job.customerName}
-            description={job.address}
-            anchor={{ x: 0.5, y: 1 }}
-          >
-            <View style={styles.homeMarker}>
-              <View style={styles.homeMarkerInner}>
-                <Ionicons name="home" size={16} color="white" />
-              </View>
-              <View style={styles.homeMarkerTail} />
-            </View>
-          </Marker>
-        )}
-
-        {/* Route polyline */}
-        {vendorCoords && customerCoords && (
-          <Polyline
-            coordinates={[vendorCoords, customerCoords]}
-            strokeColor="#3b82f6"
-            strokeWidth={4}
-            lineDashPattern={[10, 6]}
-          />
-        )}
-      </MapView>
-
-      {/* GPS initialising overlay */}
-      {locationGranted === null && (
-        <View style={styles.loadingOverlay}>
-          <ActivityIndicator color="white" size="large" />
-          <Text style={styles.loadingText}>Getting your location…</Text>
-        </View>
-      )}
-
-      {/* ── Top controls ─────────────────────────────────────────── */}
-      <View style={styles.topRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.floatBtn}>
+      {/* ── Top bar ──────────────────────────────────────────────── */}
+      <View style={st.topBar}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={st.floatBtn}>
           <Ionicons name="arrow-back" size={22} color={Colors.onSurface} />
         </TouchableOpacity>
 
-        {/* ETA pill — shown once we have both coords */}
-        {vendorCoords && customerCoords && (
-          <View style={styles.etaPill}>
+        {distText ? (
+          <View style={st.etaPill}>
             <Ionicons name="time-outline" size={14} color="#4ade80" />
-            <Text style={styles.etaPillText}>{etaText}</Text>
-            {distText ? (
-              <Text style={styles.distPillText}>· {distText}</Text>
-            ) : null}
+            <Text style={st.etaPillText}>{etaText}</Text>
+            <Text style={st.distPillText}>· {distText}</Text>
+          </View>
+        ) : (
+          <View style={st.etaPill}>
+            <Text style={st.etaPillText}>Locating…</Text>
           </View>
         )}
 
-        {/* GPS status dot */}
-        <View style={[styles.floatBtn, { backgroundColor: gpsColor + '22' }]}>
+        <View style={[st.floatBtn, { backgroundColor: gpsColor + '22' }]}>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: gpsColor }} />
         </View>
       </View>
 
-      {/* ── Bottom card ──────────────────────────────────────────── */}
-      <View style={styles.bottomCard}>
-        <View style={styles.handle} />
+      {/* ── Map area — tracking card (no API key needed) ─────────── */}
+      <View style={st.mapArea}>
+        <LinearGradient colors={['#0f2a3a', '#1a3550']} style={st.trackingCard}>
 
-        {/* Customer row */}
-        <View style={styles.customerRow}>
-          <View style={styles.customerAvatar}>
+          {/* GPS status */}
+          <View style={st.gpsBadge}>
+            <View style={[st.gpsDot, { backgroundColor: gpsColor }]} />
+            <Text style={[st.gpsText, { color: gpsColor }]}>
+              {gpsGranted === null ? 'Getting GPS…'
+                : gpsGranted ? 'Live GPS — customer can see you'
+                : 'Location denied'}
+            </Text>
+          </View>
+
+          {/* Route visualisation */}
+          <View style={st.routeRow}>
+            <View style={st.pinWrap}>
+              <LinearGradient colors={['#2563eb', '#06b6d4']} style={st.vendorPin}>
+                <Ionicons name="car" size={20} color="white" />
+              </LinearGradient>
+              <Text style={st.pinLabel}>You</Text>
+            </View>
+
+            <View style={st.routeMid}>
+              <View style={st.barBg}>
+                <LinearGradient
+                  colors={['#2563eb', '#06b6d4']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                  style={[st.barFill, { width: `${progress}%` as any }]}
+                />
+              </View>
+              <View style={st.dots}>
+                {[0,1,2,3,4].map(i => (
+                  <View key={i} style={[st.dot, {
+                    opacity: vendorCoords ? 0.9 - i * 0.15 : 0.2,
+                  }]} />
+                ))}
+              </View>
+              {distText && (
+                <Text style={st.routeLabel}>{distText} · ETA {etaText}</Text>
+              )}
+            </View>
+
+            <View style={st.pinWrap}>
+              <View style={st.homePin}>
+                <Ionicons name="home" size={20} color="white" />
+              </View>
+              <Text style={st.pinLabel}>{job.customerName.split(' ')[0]}</Text>
+            </View>
+          </View>
+
+          <Text style={st.mapNote}>
+            📍 {job.address}
+          </Text>
+          <Text style={st.mapHint}>
+            Tap "Open Navigation" for turn-by-turn directions
+          </Text>
+        </LinearGradient>
+      </View>
+
+      {/* GPS loading overlay */}
+      {gpsGranted === null && (
+        <View style={st.loadingOverlay}>
+          <ActivityIndicator color="white" size="large" />
+          <Text style={st.loadingText}>Getting your location…</Text>
+        </View>
+      )}
+
+      {/* ── Bottom card ──────────────────────────────────────────── */}
+      <View style={st.bottomCard}>
+        <View style={st.handle} />
+
+        {/* Customer info */}
+        <View style={st.customerRow}>
+          <View style={st.avatar}>
             <Ionicons name="person" size={22} color={Colors.onSurfaceVariant} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.customerName}>{job.customerName}</Text>
-            <Text style={styles.serviceLabel} numberOfLines={1}>
-              {job.serviceName}
-            </Text>
-            {/* ETA under name */}
-            {distText ? (
-              <Text style={styles.etaUnderName}>
-                📍 {distText} away · ETA {etaText}
-              </Text>
-            ) : null}
+            <Text style={st.customerName}>{job.customerName}</Text>
+            <Text style={st.serviceName} numberOfLines={1}>{job.serviceName}</Text>
+            {distText && (
+              <Text style={st.etaUnder}>📍 {distText} · ETA {etaText}</Text>
+            )}
           </View>
-          <View style={styles.timePill}>
-            <Text style={styles.timePillText}>{job.date}</Text>
-            <Text style={styles.timePillText}>{job.time}</Text>
+          <View style={st.timePill}>
+            <Text style={st.timeText}>{job.date}</Text>
+            <Text style={st.timeText}>{job.time}</Text>
           </View>
         </View>
 
-        {/* Address */}
-        <View style={styles.addressRow}>
-          <Ionicons name="location" size={14} color={Colors.accentCyan} />
-          <Text style={styles.addressText} numberOfLines={2}>{job.address}</Text>
-        </View>
-
-        {/* GPS status bar */}
-        <View style={styles.gpsRow}>
-          <View style={[styles.gpsDot, { backgroundColor: gpsColor }]} />
-          <Text style={[styles.gpsText, { color: gpsColor }]}>
-            {locationGranted === null ? 'Checking GPS…'
-              : locationGranted
-                ? customerCoords
-                  ? `Live GPS active · customer can see you`
-                  : 'Live GPS active · waiting for customer coords'
-                : 'Location denied — customer cannot track you'}
-          </Text>
-        </View>
-
-        {/* Action buttons */}
-        <View style={styles.actionsRow}>
-          <TouchableOpacity onPress={handleCall} style={styles.callBtn}>
+        {/* Actions */}
+        <View style={st.actionsRow}>
+          <TouchableOpacity
+            onPress={() => Linking.openURL(`tel:${job.customerPhone || '+919999999999'}`)}
+            style={st.callBtn}
+          >
             <Ionicons name="call" size={22} color={Colors.onSurface} />
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={handleStartNavigation}
+            onPress={handleNavigation}
             style={{ flex: 1, borderRadius: Radius.full, overflow: 'hidden' }}
             activeOpacity={0.85}
           >
             <LinearGradient
               colors={['#06b6d4', '#2563eb']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={styles.navBtn}
+              style={st.navBtn}
             >
               <Ionicons name="navigate" size={20} color="white" />
-              <Text style={styles.navBtnText}>
-                {navigating ? 'Navigating…' : 'Open Navigation'}
-              </Text>
+              <Text style={st.navBtnText}>{navigating ? 'Navigating…' : 'Open Navigation'}</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
 
-        {/* Arrived button */}
+        {/* Arrived */}
         {!arrived ? (
-          <TouchableOpacity
-            onPress={handleArrived}
-            style={styles.arrivedBtn}
-            activeOpacity={0.85}
-          >
+          <TouchableOpacity onPress={handleArrived} style={st.arrivedBtn} activeOpacity={0.85}>
             <Ionicons name="flag" size={20} color="#4ade80" />
-            <Text style={styles.arrivedBtnText}>I've Arrived at Customer</Text>
+            <Text style={st.arrivedText}>I've Arrived at Customer</Text>
           </TouchableOpacity>
         ) : (
-          <View style={[styles.arrivedBtn, {
-            borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)',
-          }]}>
+          <View style={[st.arrivedBtn, { borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)' }]}>
             <Ionicons name="checkmark-circle" size={20} color="#4ade80" />
-            <Text style={styles.arrivedBtnText}>Arrived — Verifying OTP…</Text>
+            <Text style={st.arrivedText}>Arrived — Verifying OTP…</Text>
           </View>
         )}
       </View>
@@ -412,115 +310,105 @@ export default function MapScreen({ route, navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container:      { flex: 1, backgroundColor: Colors.midnightNavy },
-  map:            { flex: 1 },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.midnightNavy + 'CC',
-    justifyContent: 'center', alignItems: 'center', gap: 12,
-  },
-  loadingText: { ...Typography.bodyMd, color: 'white' },
-
-  // Markers
-  vendorMarker:      { alignItems: 'center' },
-  vendorMarkerInner: {
-    width: 44, height: 44, borderRadius: 22,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 3, borderColor: 'white',
-    shadowColor: '#000', shadowOpacity: 0.35,
-    shadowRadius: 6, elevation: 8,
-  },
-  homeMarker:      { alignItems: 'center' },
-  homeMarkerInner: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: '#ef4444',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 3, borderColor: 'white',
-    shadowColor: '#000', shadowOpacity: 0.35,
-    shadowRadius: 6, elevation: 8,
-  },
-  homeMarkerTail: {
-    width: 0, height: 0,
-    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 12,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-    borderTopColor: '#ef4444', marginTop: -1,
-  },
-
-  // Top row
-  topRow: {
-    position: 'absolute', top: 52, left: 0, right: 0,
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: Spacing.gutter, zIndex: 10,
+const st = StyleSheet.create({
+  container:    { flex: 1, backgroundColor: Colors.midnightNavy },
+  topBar: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: Spacing.gutter, paddingTop: 52, paddingBottom: 12,
+    backgroundColor: Colors.surface,
+    borderBottomWidth: 1, borderBottomColor: Colors.outlineVariant + '30',
   },
   floatBtn: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: Colors.midnightNavy + 'EE',
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: Colors.deepBlue,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: Colors.deepBlue,
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6,
   },
   etaPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.midnightNavy + 'EE',
-    borderWidth: 1, borderColor: '#22c55e44',
+    backgroundColor: Colors.deepBlue,
     borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 10,
   },
   etaPillText:  { ...Typography.headlineMd, color: '#4ade80' },
   distPillText: { ...Typography.labelMd, color: Colors.onSurfaceVariant },
 
-  // Bottom card
+  mapArea:      { flex: 1, padding: Spacing.gutter },
+  trackingCard: { flex: 1, borderRadius: 24, padding: 20, justifyContent: 'space-evenly' },
+
+  gpsBadge:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  gpsDot:       { width: 8, height: 8, borderRadius: 4 },
+  gpsText:      { ...Typography.labelMd, fontSize: 12 },
+
+  routeRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pinWrap:      { alignItems: 'center', gap: 6 },
+  vendorPin: {
+    width: 52, height: 52, borderRadius: 26,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  homePin: {
+    width: 52, height: 52, borderRadius: 26, backgroundColor: '#ef4444',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.4)',
+  },
+  pinLabel:     { ...Typography.labelMd, color: 'rgba(255,255,255,0.7)', fontSize: 11 },
+  routeMid:     { flex: 1, gap: 8 },
+  barBg: {
+    height: 8, backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 4, overflow: 'hidden',
+  },
+  barFill:      { height: 8, borderRadius: 4 },
+  dots:         { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
+  dot:          { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3b82f6' },
+  routeLabel:   { ...Typography.labelMd, color: '#4ade80', fontSize: 12, textAlign: 'center' },
+  mapNote:      { ...Typography.bodyMd, color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  mapHint:      { ...Typography.labelMd, color: 'rgba(255,255,255,0.35)', fontSize: 11 },
+
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.midnightNavy + 'CC',
+    justifyContent: 'center', alignItems: 'center', gap: 12,
+  },
+  loadingText:  { ...Typography.bodyMd, color: 'white' },
+
   bottomCard: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: Colors.darkNavy,
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: Spacing.containerPadding, paddingBottom: 36,
     borderTopWidth: 1, borderTopColor: Colors.outlineVariant + '20',
-    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 16, elevation: 12,
+    elevation: 12,
   },
   handle: {
     width: 48, height: 5, borderRadius: 3,
     backgroundColor: Colors.onSurfaceVariant + '30',
     alignSelf: 'center', marginBottom: 18,
   },
-  customerRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
-  customerAvatar: {
-    width: 50, height: 50, borderRadius: 25,
-    backgroundColor: Colors.deepBlue,
+  customerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  avatar: {
+    width: 50, height: 50, borderRadius: 25, backgroundColor: Colors.deepBlue,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: Colors.outlineVariant + '40',
   },
-  customerName:   { ...Typography.headlineLgMobile, color: Colors.onSurface },
-  serviceLabel:   { ...Typography.labelMd, color: Colors.onSurfaceVariant, marginTop: 2 },
-  etaUnderName:   { ...Typography.labelMd, color: '#4ade80', marginTop: 4, fontSize: 11 },
+  customerName: { ...Typography.headlineLgMobile, color: Colors.onSurface },
+  serviceName:  { ...Typography.labelMd, color: Colors.onSurfaceVariant, marginTop: 2 },
+  etaUnder:     { ...Typography.labelMd, color: '#4ade80', marginTop: 4, fontSize: 11 },
   timePill: {
     backgroundColor: Colors.deepBlue, borderRadius: Radius.md,
     paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center',
   },
-  timePillText: { ...Typography.labelMd, color: Colors.accentCyan, fontSize: 11 },
-  addressRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
-  addressText:  { ...Typography.bodyMd, color: Colors.onSurfaceVariant, flex: 1 },
-  gpsRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  gpsDot:       { width: 8, height: 8, borderRadius: 4 },
-  gpsText:      { ...Typography.labelMd, fontSize: 11, flex: 1 },
+  timeText:     { ...Typography.labelMd, color: Colors.accentCyan, fontSize: 11 },
   actionsRow:   { flexDirection: 'row', gap: 12, marginBottom: 12 },
   callBtn: {
-    width: 56, height: 56, borderRadius: 28,
-    backgroundColor: Colors.deepBlue,
+    width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.deepBlue,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: Colors.outlineVariant + '40',
   },
   navBtn: {
     height: 56, flexDirection: 'row',
-    justifyContent: 'center', alignItems: 'center',
-    gap: 8, borderRadius: Radius.full,
+    justifyContent: 'center', alignItems: 'center', gap: 8,
   },
-  navBtnText:     { ...Typography.headlineMd, color: 'white' },
+  navBtnText:   { ...Typography.headlineMd, color: 'white' },
   arrivedBtn: {
     flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
-    borderWidth: 1.5, borderColor: '#22c55e66',
-    borderRadius: Radius.full, paddingVertical: 16,
-    backgroundColor: 'rgba(34,197,94,0.08)',
+    borderWidth: 1.5, borderColor: '#22c55e66', borderRadius: Radius.full,
+    paddingVertical: 16, backgroundColor: 'rgba(34,197,94,0.08)',
   },
-  arrivedBtnText: { ...Typography.headlineMd, color: '#4ade80' },
+  arrivedText:  { ...Typography.headlineMd, color: '#4ade80' },
 });
