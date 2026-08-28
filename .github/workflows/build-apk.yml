@@ -1,4 +1,4 @@
-name: Build Android APK — Urban Captain Vendor (EAS)
+name: Build Android APK — Urban Captain Vendor (Local)
 
 on:
   push:
@@ -19,20 +19,17 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Install dependencies
         run: npm install --legacy-peer-deps
 
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-
-      - name: Build APK with EAS (local build — no EAS account needed)
-        run: |
-          npx eas build \
-            --platform android \
-            --profile preview \
-            --local \
-            --output ./app-release.apk \
-            --non-interactive
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform android --no-install
         env:
           EXPO_PUBLIC_FIREBASE_API_KEY: AIzaSyDhkD-wS-wCc2ZlMbHSNTEp3MFxSrLIUQY
           EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: urban-helpers-admin.firebaseapp.com
@@ -42,9 +39,14 @@ jobs:
           EXPO_PUBLIC_FIREBASE_APP_ID: "1:843343743619:web:a0c09ea15fa85780d6a9b6"
           EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: AIzaSyAMzsDmDdT2c7r5j1dWTSxev6XSHJZTf-s
 
+      - name: Build APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: UrbanCaptain-Vendor-APK
-          path: ./app-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 14
