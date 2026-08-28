@@ -41,21 +41,51 @@ jobs:
         env:
           EXPO_NO_TELEMETRY: '1'
 
-      - name: Expo Prebuild (generate Android project)
+      - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
         env:
           EXPO_NO_TELEMETRY: '1'
 
-      - name: Patch Kotlin version
+      - name: Force Kotlin 2.1.20 in build.gradle
         run: |
-          sed -i 's/kotlinVersion = .*/kotlinVersion = "2.1.20"/' android/build.gradle || true
-          grep -q 'kotlinVersion' android/build.gradle || \
-            sed -i 's/ext {/ext {\n        kotlinVersion = "2.1.20"/' android/build.gradle
+          # Show current content around kotlin version line
+          grep -n -i kotlin android/build.gradle || true
+
+          # Replace any kotlinVersion assignment (handles single quotes, double quotes, findProperty)
+          python3 - << 'PYEOF'
+          import re
+
+          with open('android/build.gradle', 'r') as f:
+              content = f.read()
+
+          # Replace kotlinVersion however it's set
+          content = re.sub(
+              r'kotlinVersion\s*=\s*[^\n]+',
+              'kotlinVersion = "2.1.20"',
+              content
+          )
+
+          # If no kotlinVersion found at all, inject it
+          if 'kotlinVersion' not in content:
+              content = content.replace(
+                  'buildscript {',
+                  'buildscript {\n    ext.kotlinVersion = "2.1.20"',
+                  1
+              )
+
+          with open('android/build.gradle', 'w') as f:
+              f.write(content)
+
+          print("Done. Kotlin version lines:")
+          for i, line in enumerate(content.splitlines(), 1):
+              if 'kotlin' in line.lower() and 'version' in line.lower():
+                  print(f"  Line {i}: {line.strip()}")
+          PYEOF
 
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Create JS bundle output directory
+      - name: Create JS bundle directory
         run: mkdir -p android/app/src/main/assets
 
       - name: Bundle JS
@@ -72,7 +102,11 @@ jobs:
 
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon --warning-mode none
+        run: |
+          ./gradlew assembleDebug \
+            --no-daemon \
+            --warning-mode none \
+            -Pkotlin.version=2.1.20
         env:
           GRADLE_OPTS: >-
             -Dorg.gradle.daemon=false
