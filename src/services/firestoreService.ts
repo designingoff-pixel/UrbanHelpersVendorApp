@@ -12,6 +12,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   query,
   serverTimestamp,
@@ -243,4 +244,39 @@ export async function verifyOTP(
   }
 
   return correct;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Send OTP via Expo Push API to Customer
+// ─────────────────────────────────────────────────────────────────────────────
+export async function notifyCustomerOTP(customerId: string, otp: string) {
+  try {
+    const userDoc = await getDoc(doc(db, "users", customerId));
+    if (userDoc.exists()) {
+      const data = userDoc.data();
+      if (data.pushToken) {
+        // Send Expo Push Notification
+        await fetch("https://exp.host/--/api/v2/push/send", {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Accept-encoding": "gzip, deflate",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            to: data.pushToken,
+            sound: "default",
+            title: "📍 Vendor Arrived!",
+            body: `Your vendor has arrived. Share this OTP with them: ${otp}`,
+            data: { screen: "LiveTracking" },
+          }),
+        });
+        console.log("OTP Push sent to customer");
+      } else {
+        console.warn("Customer does not have a push token saved.");
+      }
+    }
+  } catch (error) {
+    console.error("Failed to send OTP push notification:", error);
+  }
 }

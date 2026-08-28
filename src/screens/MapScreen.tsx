@@ -13,6 +13,7 @@ import { store } from '../store/AppStore';
 import {
   updateVendorLocation,
   updateBookingStatus,
+  notifyCustomerOTP,
 } from '../services/firestoreService';
 import { Colors, Typography, Spacing, Radius } from '../theme';
 
@@ -133,6 +134,9 @@ export default function MapScreen({ route, navigation }: any) {
   const handleArrived = async () => {
     try {
       await updateBookingStatus(job.bookingId, 'arrived');
+      if (job.customerId && job.otp) {
+        await notifyCustomerOTP(job.customerId, job.otp);
+      }
       store.updateJobStatus(jobId, 'ARRIVED', { arrivedAt: Date.now() });
       setArrived(true);
       if (timer.current) { clearInterval(timer.current); timer.current = null; }
