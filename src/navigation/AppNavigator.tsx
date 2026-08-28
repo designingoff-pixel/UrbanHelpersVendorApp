@@ -26,17 +26,15 @@ const Stack = createNativeStackNavigator();
 
 // ── Custom Tab Bar (no Reanimated dependency) ──────────────────────────────
 const TABS = [
-  { name: 'Home',     icon: 'home',     iconOut: 'home-outline'     },
-  { name: 'Jobs',     icon: 'briefcase',iconOut: 'briefcase-outline' },
-  { name: 'Map',      icon: 'map',      iconOut: 'map-outline'       },
-  { name: 'Earnings', icon: 'wallet',   iconOut: 'wallet-outline'    },
-  { name: 'Profile',  icon: 'person',   iconOut: 'person-outline'    },
+  { name: 'Home',     icon: 'home',      iconOut: 'home-outline'      },
+  { name: 'Jobs',     icon: 'briefcase', iconOut: 'briefcase-outline'  },
+  { name: 'Earnings', icon: 'wallet',    iconOut: 'wallet-outline'     },
+  { name: 'Profile',  icon: 'person',    iconOut: 'person-outline'     },
 ];
 
 const TAB_SCREENS: Record<string, React.ComponentType<any>> = {
   Home:     HomeScreen,
   Jobs:     JobsScreen,
-  Map:      MapScreen,
   Earnings: EarningsScreen,
   Profile:  ProfileScreen,
 };
@@ -74,18 +72,6 @@ function MainTabsScreen({ navigation }: any) {
   const [activeTab, setActiveTab] = useState('Home');
 
   const handleTabPress = (name: string) => {
-    if (name === 'Map') {
-      const activeJob = store.jobs.find(j =>
-        ['ACCEPTED','NAVIGATING','ARRIVED','OTP_PENDING','CUSTOMER_VERIFIED',
-         'SERVICE_STARTED','RECORDING_ACTIVE'].includes(j.status)
-      );
-      if (activeJob) {
-        navigation.navigate('Map', { jobId: activeJob.jobId });
-        return;
-      }
-      setActiveTab('Jobs');
-      return;
-    }
     setActiveTab(name);
   };
 
