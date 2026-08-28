@@ -48,24 +48,18 @@ jobs:
 
       - name: Force Kotlin 2.1.20 in build.gradle
         run: |
-          # Show current content around kotlin version line
-          grep -n -i kotlin android/build.gradle || true
-
-          # Replace any kotlinVersion assignment (handles single quotes, double quotes, findProperty)
           python3 - << 'PYEOF'
           import re
 
           with open('android/build.gradle', 'r') as f:
               content = f.read()
 
-          # Replace kotlinVersion however it's set
           content = re.sub(
               r'kotlinVersion\s*=\s*[^\n]+',
               'kotlinVersion = "2.1.20"',
               content
           )
 
-          # If no kotlinVersion found at all, inject it
           if 'kotlinVersion' not in content:
               content = content.replace(
                   'buildscript {',
@@ -76,10 +70,23 @@ jobs:
           with open('android/build.gradle', 'w') as f:
               f.write(content)
 
-          print("Done. Kotlin version lines:")
-          for i, line in enumerate(content.splitlines(), 1):
-              if 'kotlin' in line.lower() and 'version' in line.lower():
-                  print(f"  Line {i}: {line.strip()}")
+          print("Kotlin version patched to 2.1.20")
+          PYEOF
+
+      - name: Remove unsupported enableBundleCompression from app/build.gradle
+        run: |
+          python3 - << 'PYEOF'
+          with open('android/app/build.gradle', 'r') as f:
+              lines = f.readlines()
+
+          # Remove any line containing enableBundleCompression
+          filtered = [l for l in lines if 'enableBundleCompression' not in l]
+
+          with open('android/app/build.gradle', 'w') as f:
+              f.writelines(filtered)
+
+          removed = len(lines) - len(filtered)
+          print(f"Removed {removed} line(s) containing enableBundleCompression")
           PYEOF
 
       - name: Make gradlew executable
