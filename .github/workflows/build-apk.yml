@@ -44,6 +44,14 @@ jobs:
           sed -i '/enableBundleCompression/d' android/app/build.gradle
           cd android
           ./gradlew assembleRelease
+        env:
+          EXPO_PUBLIC_FIREBASE_API_KEY: AIzaSyDhkD-wS-wCc2ZlMbHSNTEp3MFxSrLIUQY
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: urban-helpers-admin.firebaseapp.com
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: urban-helpers-admin
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: urban-helpers-admin.firebasestorage.app
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "843343743619"
+          EXPO_PUBLIC_FIREBASE_APP_ID: "1:843343743619:web:a0c09ea15fa85780d6a9b6"
+          EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: AIzaSyAMzsDmDdT2c7r5j1dWTSxev6XSHJZTf-s
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
