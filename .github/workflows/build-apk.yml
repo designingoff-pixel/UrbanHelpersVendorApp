@@ -1,4 +1,4 @@
-name: Build Android APK — Urban Captain Vendor
+name: Build Android APK — Urban Captain Vendor (EAS)
 
 on:
   push:
@@ -19,110 +19,32 @@ jobs:
         with:
           node-version: 20
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: zulu
-          java-version: '17'
-
-      - name: Create .env
-        run: |
-          cat > .env << 'EOF'
-          EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyDhkD-wS-wCc2ZlMbHSNTEp3MFxSrLIUQY
-          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=urban-helpers-admin.firebaseapp.com
-          EXPO_PUBLIC_FIREBASE_PROJECT_ID=urban-helpers-admin
-          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=urban-helpers-admin.firebasestorage.app
-          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=843343743619
-          EXPO_PUBLIC_FIREBASE_APP_ID=1:843343743619:web:a0c09ea15fa85780d6a9b6
-          EOF
-
       - name: Install dependencies
         run: npm install --legacy-peer-deps
-        env:
-          EXPO_NO_TELEMETRY: '1'
 
-      - name: Expo Prebuild
-        run: npx expo prebuild --platform android --clean --no-install
-        env:
-          EXPO_NO_TELEMETRY: '1'
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
 
-      - name: Force Kotlin 2.1.20 in build.gradle
+      - name: Build APK with EAS (local build — no EAS account needed)
         run: |
-          python3 - << 'PYEOF'
-          import re
-
-          with open('android/build.gradle', 'r') as f:
-              content = f.read()
-
-          content = re.sub(
-              r'kotlinVersion\s*=\s*[^\n]+',
-              'kotlinVersion = "2.1.20"',
-              content
-          )
-
-          if 'kotlinVersion' not in content:
-              content = content.replace(
-                  'buildscript {',
-                  'buildscript {\n    ext.kotlinVersion = "2.1.20"',
-                  1
-              )
-
-          with open('android/build.gradle', 'w') as f:
-              f.write(content)
-
-          print("Kotlin version patched to 2.1.20")
-          PYEOF
-
-      - name: Remove unsupported enableBundleCompression from app/build.gradle
-        run: |
-          python3 - << 'PYEOF'
-          with open('android/app/build.gradle', 'r') as f:
-              lines = f.readlines()
-
-          # Remove any line containing enableBundleCompression
-          filtered = [l for l in lines if 'enableBundleCompression' not in l]
-
-          with open('android/app/build.gradle', 'w') as f:
-              f.writelines(filtered)
-
-          removed = len(lines) - len(filtered)
-          print(f"Removed {removed} line(s) containing enableBundleCompression")
-          PYEOF
-
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
-
-      - name: Create JS bundle directory
-        run: mkdir -p android/app/src/main/assets
-
-      - name: Bundle JS
-        run: |
-          npx expo export:embed \
+          npx eas build \
             --platform android \
-            --entry-file index.ts \
-            --bundle-output android/app/src/main/assets/index.android.bundle \
-            --assets-dest android/app/src/main/res \
-            --dev false
+            --profile preview \
+            --local \
+            --output ./app-release.apk \
+            --non-interactive
         env:
-          NODE_ENV: production
-          EXPO_NO_TELEMETRY: '1'
-
-      - name: Build Debug APK
-        working-directory: android
-        run: |
-          ./gradlew assembleDebug \
-            --no-daemon \
-            --warning-mode none \
-            -Pkotlin.version=2.1.20
-        env:
-          GRADLE_OPTS: >-
-            -Dorg.gradle.daemon=false
-            -Dorg.gradle.workers.max=2
-            -Xmx4g
+          EXPO_PUBLIC_FIREBASE_API_KEY: AIzaSyDhkD-wS-wCc2ZlMbHSNTEp3MFxSrLIUQY
+          EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN: urban-helpers-admin.firebaseapp.com
+          EXPO_PUBLIC_FIREBASE_PROJECT_ID: urban-helpers-admin
+          EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET: urban-helpers-admin.firebasestorage.app
+          EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "843343743619"
+          EXPO_PUBLIC_FIREBASE_APP_ID: "1:843343743619:web:a0c09ea15fa85780d6a9b6"
+          EXPO_PUBLIC_GOOGLE_MAPS_API_KEY: AIzaSyAMzsDmDdT2c7r5j1dWTSxev6XSHJZTf-s
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: UrbanCaptain-Vendor-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: ./app-release.apk
           retention-days: 14

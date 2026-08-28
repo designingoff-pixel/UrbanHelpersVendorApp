@@ -24,6 +24,9 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.urbancaptain.vendor",
+      "config": {
+        "googleMapsApiKey": "AIzaSyAMzsDmDdT2c7r5j1dWTSxev6XSHJZTf-s"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Urban Captain needs your location to navigate to customers.",
         "NSLocationAlwaysUsageDescription": "Urban Captain uses your location to show customers where you are."
@@ -41,7 +44,12 @@
         "ACCESS_COARSE_LOCATION",
         "FOREGROUND_SERVICE",
         "INTERNET"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAMzsDmDdT2c7r5j1dWTSxev6XSHJZTf-s"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"

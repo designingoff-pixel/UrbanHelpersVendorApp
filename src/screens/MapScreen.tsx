@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet,
   Alert, Linking, Platform, ActivityIndicator,
 } from 'react-native';
+import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -14,12 +15,6 @@ import {
   updateBookingStatus,
 } from '../services/firestoreService';
 import { Colors, Typography, Spacing, Radius } from '../theme';
-
-// NOTE: MapView (react-native-maps) is intentionally NOT imported here.
-// It requires a Google Maps API key in the APK build.
-// Without one the app crashes on this screen.
-// All real-time tracking works through Firestore + expo-location.
-// To enable the real map, see GOOGLE_MAPS_API_KEY_GUIDE.md
 
 const GPS_INTERVAL_MS = 5000;
 
@@ -155,6 +150,74 @@ export default function MapScreen({ route, navigation }: any) {
   return (
     <View style={st.container}>
 
+      {/* ── Real Google MapView ───────────────────────────────────── */}
+      <MapView
+        style={st.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={
+          vendorCoords
+            ? { latitude: vendorCoords.lat, longitude: vendorCoords.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }
+            : customerCoords
+            ? { latitude: customerCoords.lat, longitude: customerCoords.lng, latitudeDelta: 0.02, longitudeDelta: 0.02 }
+            : { latitude: 20.5937, longitude: 78.9629, latitudeDelta: 10, longitudeDelta: 10 }
+        }
+        showsUserLocation={false}
+        showsTraffic={true}
+        showsCompass={false}
+        rotateEnabled={false}
+      >
+        {/* Vendor marker — moves every 5s */}
+        {vendorCoords && (
+          <Marker
+            coordinate={{ latitude: vendorCoords.lat, longitude: vendorCoords.lng }}
+            title="You"
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <View style={st.vendorPin}>
+              <LinearGradient colors={['#2563eb', '#06b6d4']} style={st.vendorPinInner}>
+                <Ionicons name="car" size={18} color="white" />
+              </LinearGradient>
+            </View>
+          </Marker>
+        )}
+
+        {/* Customer home marker */}
+        {customerCoords && (
+          <Marker
+            coordinate={{ latitude: customerCoords.lat, longitude: customerCoords.lng }}
+            title={job.customerName}
+            anchor={{ x: 0.5, y: 1 }}
+          >
+            <View style={st.homePin}>
+              <View style={st.homePinInner}>
+                <Ionicons name="home" size={16} color="white" />
+              </View>
+              <View style={st.homePinTail} />
+            </View>
+          </Marker>
+        )}
+
+        {/* Route polyline */}
+        {vendorCoords && customerCoords && (
+          <Polyline
+            coordinates={[
+              { latitude: vendorCoords.lat, longitude: vendorCoords.lng },
+              { latitude: customerCoords.lat, longitude: customerCoords.lng },
+            ]}
+            strokeColor="#3b82f6"
+            strokeWidth={4}
+            lineDashPattern={[10, 6]}
+          />
+        )}
+      </MapView>
+
+      {/* GPS loading overlay */}
+      {gpsGranted === null && (
+        <View style={st.loadingOverlay}>
+          <ActivityIndicator color="white" size="large" />
+          <Text style={st.loadingText}>Getting your location…</Text>
+        </View>
+      )}
       {/* ── Top bar ──────────────────────────────────────────────── */}
       <View style={st.topBar}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.floatBtn}>
@@ -178,10 +241,6 @@ export default function MapScreen({ route, navigation }: any) {
         </View>
       </View>
 
-      {/* ── Map area — tracking card (no API key needed) ─────────── */}
-      <View style={st.mapArea}>
-        <LinearGradient colors={['#0f2a3a', '#1a3550']} style={st.trackingCard}>
-
           {/* GPS status */}
           <View style={st.gpsBadge}>
             <View style={[st.gpsDot, { backgroundColor: gpsColor }]} />
@@ -194,58 +253,6 @@ export default function MapScreen({ route, navigation }: any) {
 
           {/* Route visualisation */}
           <View style={st.routeRow}>
-            <View style={st.pinWrap}>
-              <LinearGradient colors={['#2563eb', '#06b6d4']} style={st.vendorPin}>
-                <Ionicons name="car" size={20} color="white" />
-              </LinearGradient>
-              <Text style={st.pinLabel}>You</Text>
-            </View>
-
-            <View style={st.routeMid}>
-              <View style={st.barBg}>
-                <LinearGradient
-                  colors={['#2563eb', '#06b6d4']}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                  style={[st.barFill, { width: `${progress}%` as any }]}
-                />
-              </View>
-              <View style={st.dots}>
-                {[0,1,2,3,4].map(i => (
-                  <View key={i} style={[st.dot, {
-                    opacity: vendorCoords ? 0.9 - i * 0.15 : 0.2,
-                  }]} />
-                ))}
-              </View>
-              {distText && (
-                <Text style={st.routeLabel}>{distText} · ETA {etaText}</Text>
-              )}
-            </View>
-
-            <View style={st.pinWrap}>
-              <View style={st.homePin}>
-                <Ionicons name="home" size={20} color="white" />
-              </View>
-              <Text style={st.pinLabel}>{job.customerName.split(' ')[0]}</Text>
-            </View>
-          </View>
-
-          <Text style={st.mapNote}>
-            📍 {job.address}
-          </Text>
-          <Text style={st.mapHint}>
-            Tap "Open Navigation" for turn-by-turn directions
-          </Text>
-        </LinearGradient>
-      </View>
-
-      {/* GPS loading overlay */}
-      {gpsGranted === null && (
-        <View style={st.loadingOverlay}>
-          <ActivityIndicator color="white" size="large" />
-          <Text style={st.loadingText}>Getting your location…</Text>
-        </View>
-      )}
-
       {/* ── Bottom card ──────────────────────────────────────────── */}
       <View style={st.bottomCard}>
         <View style={st.handle} />
@@ -312,12 +319,94 @@ export default function MapScreen({ route, navigation }: any) {
 
 const st = StyleSheet.create({
   container:    { flex: 1, backgroundColor: Colors.midnightNavy },
-  topBar: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: Spacing.gutter, paddingTop: 52, paddingBottom: 12,
-    backgroundColor: Colors.surface,
-    borderBottomWidth: 1, borderBottomColor: Colors.outlineVariant + '30',
+  map:          { flex: 1 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.midnightNavy + 'CC',
+    justifyContent: 'center', alignItems: 'center', gap: 12,
   },
+  loadingText:  { ...Typography.bodyMd, color: 'white' },
+
+  vendorPin:       { alignItems: 'center' },
+  vendorPinInner:  {
+    width: 44, height: 44, borderRadius: 22,
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, borderColor: 'white', elevation: 8,
+  },
+  homePin:      { alignItems: 'center' },
+  homePinInner: {
+    width: 40, height: 40, borderRadius: 20, backgroundColor: '#ef4444',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 3, borderColor: 'white', elevation: 8,
+  },
+  homePinTail: {
+    width: 0, height: 0,
+    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 12,
+    borderLeftColor: 'transparent', borderRightColor: 'transparent',
+    borderTopColor: '#ef4444', marginTop: -1,
+  },
+
+  topBar: {
+    position: 'absolute', top: 52, left: 0, right: 0,
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', paddingHorizontal: Spacing.gutter, zIndex: 10,
+  },
+  floatBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: Colors.midnightNavy + 'EE',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: Colors.deepBlue, elevation: 6,
+  },
+  etaPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.midnightNavy + 'EE',
+    borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#22c55e44',
+  },
+  etaPillText:  { ...Typography.headlineMd, color: '#4ade80' },
+  distPillText: { ...Typography.labelMd, color: Colors.onSurfaceVariant },
+
+  bottomCard: {
+    backgroundColor: Colors.darkNavy,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    padding: Spacing.containerPadding, paddingBottom: 36,
+    borderTopWidth: 1, borderTopColor: Colors.outlineVariant + '20', elevation: 12,
+  },
+  handle: {
+    width: 48, height: 5, borderRadius: 3,
+    backgroundColor: Colors.onSurfaceVariant + '30',
+    alignSelf: 'center', marginBottom: 18,
+  },
+  customerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
+  avatar: {
+    width: 50, height: 50, borderRadius: 25, backgroundColor: Colors.deepBlue,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  customerName: { ...Typography.headlineLgMobile, color: Colors.onSurface },
+  serviceName:  { ...Typography.labelMd, color: Colors.onSurfaceVariant, marginTop: 2 },
+  etaUnder:     { ...Typography.labelMd, color: '#4ade80', marginTop: 4, fontSize: 11 },
+  timePill: {
+    backgroundColor: Colors.deepBlue, borderRadius: Radius.md,
+    paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center',
+  },
+  timeText:     { ...Typography.labelMd, color: Colors.accentCyan, fontSize: 11 },
+  actionsRow:   { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  callBtn: {
+    width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.deepBlue,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  navBtn: {
+    height: 56, flexDirection: 'row',
+    justifyContent: 'center', alignItems: 'center', gap: 8,
+  },
+  navBtnText:   { ...Typography.headlineMd, color: 'white' },
+  arrivedBtn: {
+    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
+    borderWidth: 1.5, borderColor: '#22c55e66', borderRadius: Radius.full,
+    paddingVertical: 16, backgroundColor: 'rgba(34,197,94,0.08)',
+  },
+  arrivedText:  { ...Typography.headlineMd, color: '#4ade80' },
+});
   floatBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: Colors.deepBlue,
