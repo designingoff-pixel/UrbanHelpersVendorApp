@@ -241,18 +241,6 @@ export default function MapScreen({ route, navigation }: any) {
         </View>
       </View>
 
-          {/* GPS status */}
-          <View style={st.gpsBadge}>
-            <View style={[st.gpsDot, { backgroundColor: gpsColor }]} />
-            <Text style={[st.gpsText, { color: gpsColor }]}>
-              {gpsGranted === null ? 'Getting GPS…'
-                : gpsGranted ? 'Live GPS — customer can see you'
-                : 'Location denied'}
-            </Text>
-          </View>
-
-          {/* Route visualisation */}
-          <View style={st.routeRow}>
       {/* ── Bottom card ──────────────────────────────────────────── */}
       <View style={st.bottomCard}>
         <View style={st.handle} />
@@ -371,100 +359,6 @@ const st = StyleSheet.create({
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: Spacing.containerPadding, paddingBottom: 36,
     borderTopWidth: 1, borderTopColor: Colors.outlineVariant + '20', elevation: 12,
-  },
-  handle: {
-    width: 48, height: 5, borderRadius: 3,
-    backgroundColor: Colors.onSurfaceVariant + '30',
-    alignSelf: 'center', marginBottom: 18,
-  },
-  customerRow:  { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 },
-  avatar: {
-    width: 50, height: 50, borderRadius: 25, backgroundColor: Colors.deepBlue,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  customerName: { ...Typography.headlineLgMobile, color: Colors.onSurface },
-  serviceName:  { ...Typography.labelMd, color: Colors.onSurfaceVariant, marginTop: 2 },
-  etaUnder:     { ...Typography.labelMd, color: '#4ade80', marginTop: 4, fontSize: 11 },
-  timePill: {
-    backgroundColor: Colors.deepBlue, borderRadius: Radius.md,
-    paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center',
-  },
-  timeText:     { ...Typography.labelMd, color: Colors.accentCyan, fontSize: 11 },
-  actionsRow:   { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  callBtn: {
-    width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.deepBlue,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  navBtn: {
-    height: 56, flexDirection: 'row',
-    justifyContent: 'center', alignItems: 'center', gap: 8,
-  },
-  navBtnText:   { ...Typography.headlineMd, color: 'white' },
-  arrivedBtn: {
-    flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8,
-    borderWidth: 1.5, borderColor: '#22c55e66', borderRadius: Radius.full,
-    paddingVertical: 16, backgroundColor: 'rgba(34,197,94,0.08)',
-  },
-  arrivedText:  { ...Typography.headlineMd, color: '#4ade80' },
-});
-  floatBtn: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: Colors.deepBlue,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  etaPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.deepBlue,
-    borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 10,
-  },
-  etaPillText:  { ...Typography.headlineMd, color: '#4ade80' },
-  distPillText: { ...Typography.labelMd, color: Colors.onSurfaceVariant },
-
-  mapArea:      { flex: 1, padding: Spacing.gutter },
-  trackingCard: { flex: 1, borderRadius: 24, padding: 20, justifyContent: 'space-evenly' },
-
-  gpsBadge:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  gpsDot:       { width: 8, height: 8, borderRadius: 4 },
-  gpsText:      { ...Typography.labelMd, fontSize: 12 },
-
-  routeRow:     { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pinWrap:      { alignItems: 'center', gap: 6 },
-  vendorPin: {
-    width: 52, height: 52, borderRadius: 26,
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.4)',
-  },
-  homePin: {
-    width: 52, height: 52, borderRadius: 26, backgroundColor: '#ef4444',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.4)',
-  },
-  pinLabel:     { ...Typography.labelMd, color: 'rgba(255,255,255,0.7)', fontSize: 11 },
-  routeMid:     { flex: 1, gap: 8 },
-  barBg: {
-    height: 8, backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 4, overflow: 'hidden',
-  },
-  barFill:      { height: 8, borderRadius: 4 },
-  dots:         { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
-  dot:          { width: 8, height: 8, borderRadius: 4, backgroundColor: '#3b82f6' },
-  routeLabel:   { ...Typography.labelMd, color: '#4ade80', fontSize: 12, textAlign: 'center' },
-  mapNote:      { ...Typography.bodyMd, color: 'rgba(255,255,255,0.7)', fontSize: 12 },
-  mapHint:      { ...Typography.labelMd, color: 'rgba(255,255,255,0.35)', fontSize: 11 },
-
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: Colors.midnightNavy + 'CC',
-    justifyContent: 'center', alignItems: 'center', gap: 12,
-  },
-  loadingText:  { ...Typography.bodyMd, color: 'white' },
-
-  bottomCard: {
-    backgroundColor: Colors.darkNavy,
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: Spacing.containerPadding, paddingBottom: 36,
-    borderTopWidth: 1, borderTopColor: Colors.outlineVariant + '20',
-    elevation: 12,
   },
   handle: {
     width: 48, height: 5, borderRadius: 3,
