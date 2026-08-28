@@ -19,14 +19,6 @@
           "locationAlwaysAndWhenInUsePermission": "Urban Captain needs your location to show customers where you are.",
           "locationWhenInUsePermission": "Urban Captain needs your location to navigate to customers."
         }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "kotlinVersion": "1.9.0"
-          }
-        }
       ]
     ],
     "ios": {
