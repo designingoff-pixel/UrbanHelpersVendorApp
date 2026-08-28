@@ -18,33 +18,68 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 
 const GPS_INTERVAL_MS = 5000;
 
+// ── Haversine distance (km) ───────────────────────────────────────────────────
+function getDistanceKm(
+  lat1: number, lng1: number,
+  lat2: number, lng2: number,
+): number {
+  const R    = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function formatETA(km: number): string {
+  const mins = Math.max(1, Math.round((km / 25) * 60));
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+}
+
+function formatDist(km: number): string {
+  return km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export default function MapScreen({ route, navigation }: any) {
   const { jobId } = route.params ?? {};
 
-  const [, forceUpdate] = useState(0);
+  const [, forceUpdate]           = useState(0);
   useEffect(() => store.subscribe(() => forceUpdate(n => n + 1)), []);
 
   const job = store.getJob(jobId);
 
-  // ── Vendor live location ──────────────────────────────────────────────
+  // ── Vendor live coords ────────────────────────────────────────────────────
   const [vendorCoords, setVendorCoords] = useState<{
     latitude: number; longitude: number; heading: number;
   } | null>(null);
 
-  // ── Customer location from Firestore booking ──────────────────────────
+  // ── Customer coords from Firestore booking ────────────────────────────────
   const [customerCoords, setCustomerCoords] = useState<{
     latitude: number; longitude: number;
   } | null>(null);
 
+  // ── ETA / distance ────────────────────────────────────────────────────────
+  const [etaText,  setEtaText]  = useState('Calculating…');
+  const [distText, setDistText] = useState('');
+
+  // ── UI state ──────────────────────────────────────────────────────────────
   const [locationGranted, setLocationGranted] = useState<boolean | null>(null);
   const [navigating, setNavigating]           = useState(false);
-  const [arrived, setArrived]                 = useState(false);
+  const [arrived,    setArrived]              = useState(false);
+
   const locationTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef        = useRef<MapView>(null);
 
-  // ── Read customer coords from Firestore booking ───────────────────────
+  // ── Read customer coords from Firestore booking doc ───────────────────────
   useEffect(() => {
     if (!job?.bookingId) return;
+
     const unsub = onSnapshot(doc(db, 'bookings', job.bookingId), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
@@ -58,7 +93,27 @@ export default function MapScreen({ route, navigation }: any) {
     return unsub;
   }, [job?.bookingId]);
 
-  // ── Request location + start GPS broadcast ────────────────────────────
+  // ── Recalculate ETA when vendor moves ─────────────────────────────────────
+  useEffect(() => {
+    if (!vendorCoords || !customerCoords) return;
+    const km = getDistanceKm(
+      vendorCoords.latitude, vendorCoords.longitude,
+      customerCoords.latitude, customerCoords.longitude,
+    );
+    setEtaText(formatETA(km));
+    setDistText(formatDist(km));
+  }, [vendorCoords, customerCoords]);
+
+  // ── Fit map to show both markers ──────────────────────────────────────────
+  useEffect(() => {
+    if (!vendorCoords || !customerCoords) return;
+    mapRef.current?.fitToCoordinates(
+      [vendorCoords, customerCoords],
+      { edgePadding: { top: 80, right: 50, bottom: 340, left: 50 }, animated: true },
+    );
+  }, [!!vendorCoords, !!customerCoords]);
+
+  // ── Request location + start GPS broadcast ────────────────────────────────
   useEffect(() => {
     if (!job || !store.vendorId) return;
     let active = true;
@@ -71,7 +126,7 @@ export default function MapScreen({ route, navigation }: any) {
         setLocationGranted(false);
         Alert.alert(
           'Location Required',
-          'Please allow location access so the customer can track you.',
+          'Please allow location so the customer can track you in real time.',
         );
         return;
       }
@@ -84,13 +139,16 @@ export default function MapScreen({ route, navigation }: any) {
           });
           const { latitude, longitude, heading, speed } = pos.coords;
 
-          setVendorCoords({ latitude, longitude, heading: heading ?? 0 });
+          const newCoords = { latitude, longitude, heading: heading ?? 0 };
+          setVendorCoords(newCoords);
 
-          // Animate map to vendor position
-          mapRef.current?.animateCamera({
-            center: { latitude, longitude },
-            zoom: 16,
-          });
+          // Animate camera to vendor unless both markers visible
+          if (!customerCoords) {
+            mapRef.current?.animateCamera({
+              center: { latitude, longitude },
+              zoom: 16,
+            });
+          }
 
           await updateVendorLocation(
             store.vendorId!,
@@ -100,14 +158,13 @@ export default function MapScreen({ route, navigation }: any) {
             speed ? Math.round(speed * 3.6) : 0,
           );
         } catch {
-          // silent retry next tick
+          // silent — retry next tick
         }
       };
 
       broadcast();
       locationTimer.current = setInterval(broadcast, GPS_INTERVAL_MS);
 
-      // Mark en_route in Firestore
       await updateBookingStatus(job.bookingId, 'en_route').catch(() => {});
       store.updateJobStatus(jobId, 'NAVIGATING');
     })();
@@ -121,18 +178,9 @@ export default function MapScreen({ route, navigation }: any) {
     };
   }, [job?.bookingId, store.vendorId]);
 
-  // ── Fit map to show both markers when both are ready ─────────────────
-  useEffect(() => {
-    if (!vendorCoords || !customerCoords) return;
-    mapRef.current?.fitToCoordinates(
-      [vendorCoords, customerCoords],
-      { edgePadding: { top: 100, right: 60, bottom: 320, left: 60 }, animated: true },
-    );
-  }, [!!vendorCoords, !!customerCoords]);
-
   if (!job) return null;
 
-  // ── Open Google Maps navigation ───────────────────────────────────────
+  // ── Open Google Maps navigation ───────────────────────────────────────────
   const handleStartNavigation = async () => {
     setNavigating(true);
     const dest = customerCoords
@@ -142,18 +190,16 @@ export default function MapScreen({ route, navigation }: any) {
       ? `maps://app?daddr=${dest}&dirflg=d`
       : `google.navigation:q=${dest}&mode=d`;
     const fallback = `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`;
-
     const canOpen = await Linking.canOpenURL(url);
     Linking.openURL(canOpen ? url : fallback);
   };
 
-  // ── I've Arrived ──────────────────────────────────────────────────────
+  // ── I've Arrived ──────────────────────────────────────────────────────────
   const handleArrived = async () => {
     try {
       await updateBookingStatus(job.bookingId, 'arrived');
       store.updateJobStatus(jobId, 'ARRIVED', { arrivedAt: Date.now() });
       setArrived(true);
-      // Stop GPS broadcasting — vendor is stationary now
       if (locationTimer.current) {
         clearInterval(locationTimer.current);
         locationTimer.current = null;
@@ -172,8 +218,8 @@ export default function MapScreen({ route, navigation }: any) {
     );
 
   const gpsColor =
-    locationGranted === null  ? '#facc15' :
-    locationGranted           ? '#4ade80' : '#ef4444';
+    locationGranted === null ? '#facc15' :
+    locationGranted          ? '#4ade80' : '#ef4444';
 
   const initialRegion = vendorCoords
     ? { ...vendorCoords, latitudeDelta: 0.02, longitudeDelta: 0.02 }
@@ -184,7 +230,7 @@ export default function MapScreen({ route, navigation }: any) {
   return (
     <View style={styles.container}>
 
-      {/* ── Real MapView ────────────────────────────────────────────── */}
+      {/* ── Real MapView ──────────────────────────────────────────── */}
       <MapView
         ref={mapRef}
         style={styles.map}
@@ -194,13 +240,13 @@ export default function MapScreen({ route, navigation }: any) {
         showsMyLocationButton={false}
         showsTraffic={true}
         showsCompass={false}
+        rotateEnabled={false}
       >
-        {/* Vendor marker — moves every 5s */}
+        {/* Vendor marker — updates every 5s */}
         {vendorCoords && (
           <Marker
             coordinate={vendorCoords}
             title="You"
-            description="Your current location"
             anchor={{ x: 0.5, y: 0.5 }}
           >
             <View style={styles.vendorMarker}>
@@ -214,34 +260,35 @@ export default function MapScreen({ route, navigation }: any) {
           </Marker>
         )}
 
-        {/* Customer marker */}
+        {/* Customer home marker */}
         {customerCoords && (
           <Marker
             coordinate={customerCoords}
             title={job.customerName}
             description={job.address}
+            anchor={{ x: 0.5, y: 1 }}
           >
-            <View style={styles.customerMarker}>
-              <View style={styles.customerMarkerInner}>
+            <View style={styles.homeMarker}>
+              <View style={styles.homeMarkerInner}>
                 <Ionicons name="home" size={16} color="white" />
               </View>
-              <View style={styles.customerMarkerPin} />
+              <View style={styles.homeMarkerTail} />
             </View>
           </Marker>
         )}
 
-        {/* Route line between vendor and customer */}
+        {/* Route polyline */}
         {vendorCoords && customerCoords && (
           <Polyline
             coordinates={[vendorCoords, customerCoords]}
             strokeColor="#3b82f6"
             strokeWidth={4}
-            lineDashPattern={[8, 4]}
+            lineDashPattern={[10, 6]}
           />
         )}
       </MapView>
 
-      {/* Loading overlay while GPS is initialising */}
+      {/* GPS initialising overlay */}
       {locationGranted === null && (
         <View style={styles.loadingOverlay}>
           <ActivityIndicator color="white" size="large" />
@@ -249,26 +296,30 @@ export default function MapScreen({ route, navigation }: any) {
         </View>
       )}
 
-      {/* ── Top controls ────────────────────────────────────────────── */}
+      {/* ── Top controls ─────────────────────────────────────────── */}
       <View style={styles.topRow}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.floatBtn}>
           <Ionicons name="arrow-back" size={22} color={Colors.onSurface} />
         </TouchableOpacity>
 
-        {navigating && (
-          <View style={styles.navBanner}>
-            <Ionicons name="navigate" size={16} color="#4ade80" />
-            <Text style={styles.navBannerText}>Navigation active</Text>
+        {/* ETA pill — shown once we have both coords */}
+        {vendorCoords && customerCoords && (
+          <View style={styles.etaPill}>
+            <Ionicons name="time-outline" size={14} color="#4ade80" />
+            <Text style={styles.etaPillText}>{etaText}</Text>
+            {distText ? (
+              <Text style={styles.distPillText}>· {distText}</Text>
+            ) : null}
           </View>
         )}
 
-        {/* GPS live dot */}
+        {/* GPS status dot */}
         <View style={[styles.floatBtn, { backgroundColor: gpsColor + '22' }]}>
           <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: gpsColor }} />
         </View>
       </View>
 
-      {/* ── Bottom card ─────────────────────────────────────────────── */}
+      {/* ── Bottom card ──────────────────────────────────────────── */}
       <View style={styles.bottomCard}>
         <View style={styles.handle} />
 
@@ -282,9 +333,16 @@ export default function MapScreen({ route, navigation }: any) {
             <Text style={styles.serviceLabel} numberOfLines={1}>
               {job.serviceName}
             </Text>
+            {/* ETA under name */}
+            {distText ? (
+              <Text style={styles.etaUnderName}>
+                📍 {distText} away · ETA {etaText}
+              </Text>
+            ) : null}
           </View>
           <View style={styles.timePill}>
-            <Text style={styles.timePillText}>{job.date} • {job.time}</Text>
+            <Text style={styles.timePillText}>{job.date}</Text>
+            <Text style={styles.timePillText}>{job.time}</Text>
           </View>
         </View>
 
@@ -294,13 +352,16 @@ export default function MapScreen({ route, navigation }: any) {
           <Text style={styles.addressText} numberOfLines={2}>{job.address}</Text>
         </View>
 
-        {/* GPS status */}
+        {/* GPS status bar */}
         <View style={styles.gpsRow}>
           <View style={[styles.gpsDot, { backgroundColor: gpsColor }]} />
           <Text style={[styles.gpsText, { color: gpsColor }]}>
-            {locationGranted === null ? 'Getting location…'
-              : locationGranted ? 'Live GPS — customer can see you'
-              : 'Location denied — customer cannot track you'}
+            {locationGranted === null ? 'Checking GPS…'
+              : locationGranted
+                ? customerCoords
+                  ? `Live GPS active · customer can see you`
+                  : 'Live GPS active · waiting for customer coords'
+                : 'Location denied — customer cannot track you'}
           </Text>
         </View>
 
@@ -339,7 +400,9 @@ export default function MapScreen({ route, navigation }: any) {
             <Text style={styles.arrivedBtnText}>I've Arrived at Customer</Text>
           </TouchableOpacity>
         ) : (
-          <View style={[styles.arrivedBtn, { borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)' }]}>
+          <View style={[styles.arrivedBtn, {
+            borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)',
+          }]}>
             <Ionicons name="checkmark-circle" size={20} color="#4ade80" />
             <Text style={styles.arrivedBtnText}>Arrived — Verifying OTP…</Text>
           </View>
@@ -353,37 +416,38 @@ const styles = StyleSheet.create({
   container:      { flex: 1, backgroundColor: Colors.midnightNavy },
   map:            { flex: 1 },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject, backgroundColor: Colors.midnightNavy + 'CC',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.midnightNavy + 'CC',
     justifyContent: 'center', alignItems: 'center', gap: 12,
   },
-  loadingText:    { ...Typography.bodyMd, color: 'white' },
+  loadingText: { ...Typography.bodyMd, color: 'white' },
 
-  // Vendor marker
+  // Markers
   vendorMarker:      { alignItems: 'center' },
   vendorMarkerInner: {
     width: 44, height: 44, borderRadius: 22,
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 3, borderColor: 'white',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 8,
+    shadowColor: '#000', shadowOpacity: 0.35,
+    shadowRadius: 6, elevation: 8,
   },
-
-  // Customer marker
-  customerMarker:     { alignItems: 'center' },
-  customerMarkerInner:{
+  homeMarker:      { alignItems: 'center' },
+  homeMarkerInner: {
     width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#ef4444',
     justifyContent: 'center', alignItems: 'center',
     borderWidth: 3, borderColor: 'white',
-    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 8,
+    shadowColor: '#000', shadowOpacity: 0.35,
+    shadowRadius: 6, elevation: 8,
   },
-  customerMarkerPin: {
+  homeMarkerTail: {
     width: 0, height: 0,
-    borderLeftWidth: 6, borderRightWidth: 6, borderTopWidth: 10,
+    borderLeftWidth: 7, borderRightWidth: 7, borderTopWidth: 12,
     borderLeftColor: 'transparent', borderRightColor: 'transparent',
     borderTopColor: '#ef4444', marginTop: -1,
   },
 
-  // Top controls
+  // Top row
   topRow: {
     position: 'absolute', top: 52, left: 0, right: 0,
     flexDirection: 'row', justifyContent: 'space-between',
@@ -396,13 +460,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.deepBlue,
     shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 6, elevation: 6,
   },
-  navBanner: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
+  etaPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: Colors.midnightNavy + 'EE',
-    borderWidth: 1, borderColor: '#22c55e33',
-    borderRadius: Radius.full, paddingHorizontal: 16, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#22c55e44',
+    borderRadius: Radius.full, paddingHorizontal: 14, paddingVertical: 10,
   },
-  navBannerText:  { ...Typography.headlineMd, color: '#4ade80' },
+  etaPillText:  { ...Typography.headlineMd, color: '#4ade80' },
+  distPillText: { ...Typography.labelMd, color: Colors.onSurfaceVariant },
 
   // Bottom card
   bottomCard: {
@@ -418,7 +483,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.onSurfaceVariant + '30',
     alignSelf: 'center', marginBottom: 18,
   },
-  customerRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10 },
+  customerRow:    { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8 },
   customerAvatar: {
     width: 50, height: 50, borderRadius: 25,
     backgroundColor: Colors.deepBlue,
@@ -427,17 +492,18 @@ const styles = StyleSheet.create({
   },
   customerName:   { ...Typography.headlineLgMobile, color: Colors.onSurface },
   serviceLabel:   { ...Typography.labelMd, color: Colors.onSurfaceVariant, marginTop: 2 },
-  timePill:       {
+  etaUnderName:   { ...Typography.labelMd, color: '#4ade80', marginTop: 4, fontSize: 11 },
+  timePill: {
     backgroundColor: Colors.deepBlue, borderRadius: Radius.md,
-    paddingHorizontal: 10, paddingVertical: 6,
+    paddingHorizontal: 10, paddingVertical: 6, alignItems: 'center',
   },
-  timePillText:   { ...Typography.labelMd, color: Colors.accentCyan, fontSize: 11 },
-  addressRow:     { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10 },
-  addressText:    { ...Typography.bodyMd, color: Colors.onSurfaceVariant, flex: 1 },
-  gpsRow:         { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
-  gpsDot:         { width: 8, height: 8, borderRadius: 4 },
-  gpsText:        { ...Typography.labelMd, fontSize: 12 },
-  actionsRow:     { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  timePillText: { ...Typography.labelMd, color: Colors.accentCyan, fontSize: 11 },
+  addressRow:   { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
+  addressText:  { ...Typography.bodyMd, color: Colors.onSurfaceVariant, flex: 1 },
+  gpsRow:       { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  gpsDot:       { width: 8, height: 8, borderRadius: 4 },
+  gpsText:      { ...Typography.labelMd, fontSize: 11, flex: 1 },
+  actionsRow:   { flexDirection: 'row', gap: 12, marginBottom: 12 },
   callBtn: {
     width: 56, height: 56, borderRadius: 28,
     backgroundColor: Colors.deepBlue,
@@ -446,8 +512,8 @@ const styles = StyleSheet.create({
   },
   navBtn: {
     height: 56, flexDirection: 'row',
-    justifyContent: 'center', alignItems: 'center', gap: 8,
-    borderRadius: Radius.full,
+    justifyContent: 'center', alignItems: 'center',
+    gap: 8, borderRadius: Radius.full,
   },
   navBtnText:     { ...Typography.headlineMd, color: 'white' },
   arrivedBtn: {
