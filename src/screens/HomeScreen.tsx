@@ -33,15 +33,15 @@ export default function HomeScreen({ navigation }: any) {
 
     // 1. Jobs already assigned / accepted by this vendor
     unsubVendor.current = subscribeToVendorJobs(uid, (jobs) => {
-      store.mergeFirestoreJobs(jobs);
+      store.syncAssignedJobs(jobs);
     });
 
     // 2. Unassigned new requests broadcast to ALL online vendors
     unsubNew.current = subscribeToNewRequests((requests) => {
       setNewRequests(requests);
       // Also merge into store so Jobs tab can show them
-      if (store.vendor.isOnline && requests.length > 0) {
-        store.mergeFirestoreJobs(requests);
+      if (store.vendor.isOnline) {
+        store.syncNewRequests(requests);
       }
     });
 
@@ -92,7 +92,10 @@ export default function HomeScreen({ navigation }: any) {
   // ── Online toggle ────────────────────────────────────────────────────────
   const handleToggleOnline = async (v: boolean) => {
     store.toggleOnline(v);
-    if (!v) setNewRequests([]); // clear requests when going offline
+    if (!v) {
+      setNewRequests([]); // clear requests when going offline
+      store.syncNewRequests([]); // clear them from the Jobs tab too
+    }
     if (store.vendorId) {
       await setVendorOnlineStatus(store.vendorId, v).catch(() => {});
     }

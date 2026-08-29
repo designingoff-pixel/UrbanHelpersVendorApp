@@ -40,10 +40,29 @@ class AppStore {
     this.notify();
   }
 
-  // ── Called by HomeScreen Firestore listener to sync live jobs ──────────
-  mergeFirestoreJobs(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]) {
-    const mapped: Job[] = firestoreJobs.map(fb => {
-      // Try to find existing local job to preserve checklist progress
+  // ── Sync New Requests (clears out stale requests) ──────────────────────
+  syncNewRequests(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]) {
+    // Keep all jobs that are NOT NEW_REQUEST
+    const otherJobs = this.jobs.filter(j => j.status !== 'NEW_REQUEST' || j.jobId.startsWith('mock-'));
+    const mapped = this._mapFirestore(firestoreJobs);
+    this.jobs = [...mapped, ...otherJobs];
+    this.notify();
+  }
+
+  // ── Sync Assigned Jobs (keeps current new requests) ──────────────────────
+  syncAssignedJobs(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]) {
+    // Keep all NEW_REQUESTs
+    const newReqs = this.jobs.filter(j => j.status === 'NEW_REQUEST');
+    // Also keep local mock jobs that aren't NEW_REQUEST but aren't in incoming (mostly for demo purposes)
+    const incomingIds = new Set(firestoreJobs.map(f => f.id));
+    const localOthers = this.jobs.filter(j => j.status !== 'NEW_REQUEST' && !incomingIds.has(j.jobId));
+    const mapped = this._mapFirestore(firestoreJobs);
+    this.jobs = [...mapped, ...newReqs, ...localOthers];
+    this.notify();
+  }
+
+  private _mapFirestore(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]): Job[] {
+    return firestoreJobs.map(fb => {
       const existing = this.jobs.find(j => j.jobId === fb.id);
       return {
         jobId:               fb.id,
@@ -71,12 +90,6 @@ class AppStore {
         createdAt:           Date.now(),
       } as Job;
     });
-
-    // Merge: replace matching jobs, keep local-only jobs (mock), append new
-    const incoming = new Set(mapped.map(j => j.jobId));
-    const local    = this.jobs.filter(j => !incoming.has(j.jobId));
-    this.jobs      = [...mapped, ...local];
-    this.notify();
   }
 
   // Map Firestore status string → vendor app JobStatus
