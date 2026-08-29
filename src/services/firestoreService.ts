@@ -121,13 +121,12 @@ export async function acceptJob(
 
     const data = bookingSnap.data() as FirestoreBooking;
 
-    // Block if another vendor already accepted
     if (
       data.status === "accepted" ||
       data.status === "en_route"  ||
       data.status === "in_progress"
     ) {
-      throw new Error("This job was already accepted by another vendor.");
+      throw new Error("This service is taken by another vendor.");
     }
 
     // Lock the booking to this vendor
@@ -171,6 +170,15 @@ export async function updateBookingStatus(
   }
 
   await updateDoc(doc(db, "bookings", bookingId), update);
+}
+
+export async function updateBookingAudio(
+  bookingId: string,
+  audioUrl: string
+): Promise<void> {
+  await updateDoc(doc(db, "bookings", bookingId), {
+    audioUrl,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

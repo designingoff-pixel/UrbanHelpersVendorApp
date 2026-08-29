@@ -7,7 +7,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { store } from '../store/AppStore';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
-import { updateBookingStatus } from '../services/firestoreService';
+import { updateBookingStatus, updateBookingAudio } from '../services/firestoreService';
+import { Audio } from 'expo-av';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storage } from '../services/firebase';
 
 function formatTime(secs: number) {
   const h = Math.floor(secs / 3600);
@@ -22,6 +25,7 @@ export default function ServiceScreen({ route, navigation }: any) {
   const [showStopSheet, setShowStopSheet] = useState(false);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
 
   useEffect(() => {
     const unsub = store.subscribe(() => forceUpdate(n => n + 1));
@@ -30,11 +34,31 @@ export default function ServiceScreen({ route, navigation }: any) {
     const job = store.getJob(jobId);
     if (job) updateBookingStatus(job.bookingId, 'in_progress');
 
-    // Start timer
+    // Start timer and recording
+    const startRecording = async () => {
+      try {
+        await Audio.requestPermissionsAsync();
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: true,
+          playsInSilentModeIOS: true,
+        });
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
+        setRecording(recording);
+      } catch (err) {
+        console.error('Failed to start recording', err);
+      }
+    };
+    startRecording();
+
     timerRef.current = setInterval(() => { if (!paused) store.tickRecording(); }, 1000);
     return () => {
       unsub();
       if (timerRef.current) clearInterval(timerRef.current);
+      if (recording) {
+        recording.stopAndUnloadAsync().catch(console.error);
+      }
     };
   }, []);
 
@@ -53,12 +77,31 @@ export default function ServiceScreen({ route, navigation }: any) {
   const total = job.checklist.length;
   const progress = total > 0 ? done / total : 0;
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     if (timerRef.current) clearInterval(timerRef.current);
-    store.completeJob(jobId);
     setShowStopSheet(false);
+    
+    // Stop recording and upload
+    if (recording) {
+      try {
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        if (uri && job) {
+          const response = await fetch(uri);
+          const blob = await response.blob();
+          const audioRef = ref(storage, `recordings/${job.bookingId}_${Date.now()}.m4a`);
+          await uploadBytes(audioRef, blob);
+          const downloadUrl = await getDownloadURL(audioRef);
+          await updateBookingAudio(job.bookingId, downloadUrl);
+        }
+      } catch (err) {
+        console.error("Failed to upload recording", err);
+      }
+    }
+
+    store.completeJob(jobId);
+    
     // Notify customer: service completed
-    const job = store.getJob(jobId);
     if (job) updateBookingStatus(job.bookingId, 'completed');
     navigation.navigate('Complete', { jobId });
   };
