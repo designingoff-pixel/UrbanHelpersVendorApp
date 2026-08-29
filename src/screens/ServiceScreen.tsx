@@ -88,8 +88,15 @@ export default function ServiceScreen({ route, navigation }: any) {
         await recording.stopAndUnloadAsync();
         const uri = recording.getURI();
         if (uri && job) {
-          const response = await fetch(uri);
-          const blob = await response.blob();
+          // Use XMLHttpRequest instead of fetch for local file URIs on React Native Android
+          const blob: any = await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.onload = function () { resolve(xhr.response); };
+            xhr.onerror = function (e) { reject(new TypeError("Network request failed")); };
+            xhr.responseType = "blob";
+            xhr.open("GET", uri, true);
+            xhr.send(null);
+          });
           const audioRef = ref(storage, `recordings/${job.bookingId}_${Date.now()}.m4a`);
           await uploadBytes(audioRef, blob);
           const downloadUrl = await getDownloadURL(audioRef);
