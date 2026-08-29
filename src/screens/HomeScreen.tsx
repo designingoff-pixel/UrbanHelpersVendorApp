@@ -61,7 +61,7 @@ export default function HomeScreen({ navigation }: any) {
   const handleAccept = async (booking: FirestoreBooking) => {
     setAcceptingId(booking.id);
     try {
-      await acceptJob(booking.id, store.vendorId!, store.vendor.name);
+      await acceptJob(booking.id, store.vendorId!, store.vendor.name, store.vendor.mobile);
       // Remove from new requests list immediately (optimistic)
       setNewRequests(prev => prev.filter(r => r.id !== booking.id));
       store.updateJobStatus(booking.id, 'ACCEPTED', { acceptedAt: Date.now() });

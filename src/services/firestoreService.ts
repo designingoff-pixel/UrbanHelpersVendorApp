@@ -37,8 +37,10 @@ export interface FirestoreBooking {
   id:              string;
   customerId:      string;
   customerName:    string;
+  customerPhone?:  string; // ← added
   vendorId?:       string;
   vendorName?:     string;
+  vendorPhone?:    string; // ← added
   serviceCategory: string;
   subServiceName:  string;
   status:          BookingStatus;
@@ -104,7 +106,8 @@ export function subscribeToNewRequests(
 export async function acceptJob(
   bookingId: string,
   vendorId:  string,
-  vendorName: string
+  vendorName: string,
+  vendorPhone: string
 ): Promise<void> {
   const { runTransaction } = await import("firebase/firestore");
 
@@ -131,6 +134,7 @@ export async function acceptJob(
     transaction.update(bookingRef, {
       vendorId,
       vendorName,
+      vendorPhone, // ← save vendor phone to booking
       status:     "accepted",
       acceptedAt: serverTimestamp(),
     });

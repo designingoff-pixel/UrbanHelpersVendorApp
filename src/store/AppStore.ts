@@ -49,7 +49,7 @@ class AppStore {
         jobId:               fb.id,
         customerId:          fb.customerId,
         customerName:        fb.customerName,
-        customerPhone:       '',
+        customerPhone:       fb.customerPhone ?? '',
         serviceType:         fb.serviceCategory,
         serviceName:         fb.serviceCategory,
         assignmentType:      'CUSTOMER_REQUEST' as const,

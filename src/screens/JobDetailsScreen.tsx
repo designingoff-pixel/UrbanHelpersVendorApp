@@ -56,7 +56,7 @@ export default function JobDetailsScreen({ route, navigation }: any) {
     switch (job.status) {
       case 'NEW_REQUEST':
         try {
-          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name);
+          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name, store.vendor.mobile);
           store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
         } catch (e: any) { Alert.alert('Error', e.message); }
         break;
@@ -70,7 +70,7 @@ export default function JobDetailsScreen({ route, navigation }: any) {
 
       case 'ADMIN_ASSIGNED':
         try {
-          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name);
+          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name, store.vendor.mobile);
           store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
         } catch (e: any) { Alert.alert('Error', e.message); }
         break;
@@ -171,6 +171,17 @@ export default function JobDetailsScreen({ route, navigation }: any) {
                 <View>
                   <Text style={styles.infoLabel}>Customer</Text>
                   <Text style={styles.infoValue}>{job.customerName}</Text>
+                  {job.customerPhone ? (
+                    <TouchableOpacity onPress={() => {
+                      import('react-native').then(({ Linking }) => {
+                        Linking.openURL(`tel:${job.customerPhone}`);
+                      });
+                    }}>
+                      <Text style={[styles.infoLabel, { color: Colors.primary, marginTop: 4, fontWeight: '700' }]}>
+                        📞 Call Customer
+                      </Text>
+                    </TouchableOpacity>
+                  ) : null}
                 </View>
               </View>
               <View style={styles.infoItem}>
