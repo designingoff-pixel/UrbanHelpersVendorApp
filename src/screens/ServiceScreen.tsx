@@ -46,7 +46,8 @@ export default function ServiceScreen({ route, navigation }: any) {
           Audio.RecordingOptionsPresets.HIGH_QUALITY
         );
         setRecording(recording);
-      } catch (err) {
+      } catch (err: any) {
+        Alert.alert('Microphone Error', `Failed to start recording: ${err.message}`);
         console.error('Failed to start recording', err);
       }
     };
@@ -93,10 +94,14 @@ export default function ServiceScreen({ route, navigation }: any) {
           await uploadBytes(audioRef, blob);
           const downloadUrl = await getDownloadURL(audioRef);
           await updateBookingAudio(job.bookingId, downloadUrl);
+          Alert.alert("Success", "Audio recording uploaded successfully!");
         }
-      } catch (err) {
+      } catch (err: any) {
+        Alert.alert("Upload Failed", `Could not upload recording: ${err.message}`);
         console.error("Failed to upload recording", err);
       }
+    } else {
+      Alert.alert("Warning", "No recording was found to upload.");
     }
 
     store.completeJob(jobId);
