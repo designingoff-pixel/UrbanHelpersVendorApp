@@ -9,7 +9,7 @@ import { store } from '../store/AppStore';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 import { updateBookingStatus, updateBookingAudio } from '../services/firestoreService';
 import { updateDoc, doc } from "firebase/firestore";
-import { ref, getDownloadURL, uploadString } from "firebase/storage";
+import { getAuth } from "firebase/auth";
 import * as FileSystem from "expo-file-system/legacy";
 import { db, storage } from "../services/firebase";
 import { Audio } from 'expo-av';
@@ -90,13 +90,33 @@ export default function ServiceScreen({ route, navigation }: any) {
         await recording.stopAndUnloadAsync();
         const uri = recording.getURI();
         if (uri && job) {
-          // Read file as Base64 string to completely bypass React Native blob corruption
-          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
-          const audioRef = ref(storage, `recordings/${job.bookingId}_${Date.now()}.m4a`);
-          await uploadString(audioRef, base64, 'base64', { contentType: 'audio/m4a' });
-          const downloadUrl = await getDownloadURL(audioRef);
-          await updateBookingAudio(job.bookingId, downloadUrl);
-          Alert.alert("Success", "Audio recording uploaded successfully!");
+          // React Native's Blob and ArrayBuffer are broken.
+          // We bypass the Firebase JS SDK and upload natively using Expo FileSystem and Firebase REST API.
+          const auth = getAuth();
+          const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+          
+          const fileName = `recordings/${job.bookingId}_${Date.now()}.m4a`;
+          const storageBucket = "urban-helpers-admin.firebasestorage.app";
+          const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o?name=${encodeURIComponent(fileName)}`;
+
+          const response = await FileSystem.uploadAsync(uploadUrl, uri, {
+            httpMethod: 'POST',
+            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+            headers: {
+              'Content-Type': 'audio/m4a',
+              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            },
+          });
+
+          if (response.status === 200) {
+            const data = JSON.parse(response.body);
+            const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o/${encodeURIComponent(fileName)}?alt=media&token=${data.downloadTokens}`;
+            
+            await updateBookingAudio(job.bookingId, downloadUrl);
+            Alert.alert("Success", "Audio recording uploaded successfully!");
+          } else {
+            throw new Error(`Upload failed with status ${response.status}: ${response.body}`);
+          }
         }
       } catch (err: any) {
         Alert.alert("Upload Failed", `Could not upload recording: ${err.message}`);
