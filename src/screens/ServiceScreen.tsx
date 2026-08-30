@@ -91,7 +91,7 @@ export default function ServiceScreen({ route, navigation }: any) {
         const uri = recording.getURI();
         if (uri && job) {
           // Read file as Base64 string to completely bypass React Native blob corruption
-          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: 'base64' });
           const audioRef = ref(storage, `recordings/${job.bookingId}_${Date.now()}.m4a`);
           await uploadString(audioRef, base64, 'base64', { contentType: 'audio/m4a' });
           const downloadUrl = await getDownloadURL(audioRef);
