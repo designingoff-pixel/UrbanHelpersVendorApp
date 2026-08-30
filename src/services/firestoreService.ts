@@ -41,6 +41,7 @@ export interface FirestoreBooking {
   vendorId?:       string;
   vendorName?:     string;
   vendorPhone?:    string; // ← added
+  vendorImage?:    string; // ← added
   serviceCategory: string;
   subServiceName:  string;
   status:          BookingStatus;
@@ -107,7 +108,8 @@ export async function acceptJob(
   bookingId: string,
   vendorId:  string,
   vendorName: string,
-  vendorPhone: string
+  vendorPhone: string,
+  vendorImage?: string
 ): Promise<void> {
   const { runTransaction } = await import("firebase/firestore");
 
@@ -134,6 +136,7 @@ export async function acceptJob(
       vendorId,
       vendorName,
       vendorPhone, // ← save vendor phone to booking
+      vendorImage: vendorImage ?? null, // ← save vendor avatar
       status:     "accepted",
       acceptedAt: serverTimestamp(),
     });
@@ -148,6 +151,7 @@ export async function rejectJob(bookingId: string): Promise<void> {
     status:     "requested",   // back to requested so admin can reassign
     vendorId:   null,
     vendorName: "Vendor pending",
+    vendorImage: null,
     rejectedAt: serverTimestamp(),
   });
 }

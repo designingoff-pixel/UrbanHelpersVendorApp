@@ -6,8 +6,8 @@ type Listener = () => void;
 
 class AppStore {
   vendor: Vendor = { ...MOCK_VENDOR };
-  jobs: Job[] = MOCK_JOBS.map(j => ({ ...j, checklistDone: [...j.checklistDone] }));
-  notifications: Notification[] = [...MOCK_NOTIFICATIONS];
+  jobs: Job[] = [];
+  notifications: Notification[] = [];
   currentJobId: string | null = null;
   recordingSeconds: number = 0;
   isRecording: boolean = false;
@@ -42,8 +42,7 @@ class AppStore {
 
   // ── Sync New Requests (clears out stale requests) ──────────────────────
   syncNewRequests(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]) {
-    // Keep all jobs that are NOT NEW_REQUEST
-    const otherJobs = this.jobs.filter(j => j.status !== 'NEW_REQUEST' || j.jobId.startsWith('mock-'));
+    const otherJobs = this.jobs.filter(j => j.status !== 'NEW_REQUEST');
     const mapped = this._mapFirestore(firestoreJobs);
     this.jobs = [...mapped, ...otherJobs];
     this.notify();
@@ -51,13 +50,9 @@ class AppStore {
 
   // ── Sync Assigned Jobs (keeps current new requests) ──────────────────────
   syncAssignedJobs(firestoreJobs: import('../services/firestoreService').FirestoreBooking[]) {
-    // Keep all NEW_REQUESTs
     const newReqs = this.jobs.filter(j => j.status === 'NEW_REQUEST');
-    // Also keep local mock jobs that aren't NEW_REQUEST but aren't in incoming (mostly for demo purposes)
-    const incomingIds = new Set(firestoreJobs.map(f => f.id));
-    const localOthers = this.jobs.filter(j => j.status !== 'NEW_REQUEST' && !incomingIds.has(j.jobId));
     const mapped = this._mapFirestore(firestoreJobs);
-    this.jobs = [...mapped, ...newReqs, ...localOthers];
+    this.jobs = [...mapped, ...newReqs];
     this.notify();
   }
 
@@ -147,10 +142,6 @@ class AppStore {
     job.status = 'COMPLETED';
     job.completedAt = Date.now();
     job.recordingStoppedAt = Date.now();
-    this.vendor.todayEarnings += job.vendorEarnings;
-    this.vendor.weekEarnings += job.vendorEarnings;
-    this.vendor.monthEarnings += job.vendorEarnings;
-    this.vendor.completedJobs += 1;
     this.isRecording = false;
     this.recordingSeconds = 0;
     this.notify();
@@ -192,6 +183,15 @@ class AppStore {
       completed: ['COMPLETED', 'REJECTED', 'CANCELLED'],
     };
     return this.jobs.filter(j => (map[tab] || []).includes(j.status));
+  }
+
+  // ── Computed Stats ────────────────────────────────────────────────────────
+  get completedJobsCount(): number {
+    return this.jobs.filter(j => j.status === 'COMPLETED').length;
+  }
+
+  get totalEarnings(): number {
+    return this.jobs.filter(j => j.status === 'COMPLETED').reduce((acc, job) => acc + job.vendorEarnings, 0);
   }
 }
 

@@ -18,6 +18,7 @@ import OTPScreen from '../screens/OTPScreen';
 import ServiceScreen from '../screens/ServiceScreen';
 import CompleteScreen from '../screens/CompleteScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 import { Colors, Typography, Radius } from '../theme';
 import { store } from '../store/AppStore';
@@ -108,6 +109,7 @@ export default function AppNavigator() {
           options={{ gestureEnabled: false }}
         />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="EditProfile"   component={EditProfileScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

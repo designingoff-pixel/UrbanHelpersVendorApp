@@ -11,7 +11,7 @@ export default function ProfileScreen({ navigation }: any) {
   const { vendor } = store;
 
   const menuItems = [
-    { icon: 'create-outline', label: 'Edit Profile', onPress: () => Alert.alert('Coming Soon', 'Profile editing will be available in the full release.') },
+    { icon: 'create-outline', label: 'Edit Profile', onPress: () => navigation.navigate('EditProfile') },
     { icon: 'document-text-outline', label: 'Documents', onPress: () => Alert.alert('Coming Soon', 'Document management coming soon.') },
     { icon: 'help-circle-outline', label: 'Support', onPress: () => Alert.alert('Support', 'Call us: 1800-XXX-XXXX\nEmail: support@urbancaptain.com') },
     { icon: 'settings-outline', label: 'Settings', onPress: () => Alert.alert('Coming Soon', 'Settings will be available in the next release.') },
@@ -38,7 +38,7 @@ export default function ProfileScreen({ navigation }: any) {
               </View>
             )}
           </View>
-          <Text style={styles.completedText}>{vendor.completedJobs} Completed Services</Text>
+          <Text style={styles.completedText}>{store.completedJobsCount} Completed Services</Text>
         </LinearGradient>
 
         {/* Info Cards */}
@@ -62,8 +62,8 @@ export default function ProfileScreen({ navigation }: any) {
         {/* Stats */}
         <View style={styles.statsRow}>
           {[
-            { label: 'Total Jobs', value: vendor.completedJobs.toString() },
-            { label: 'This Month', value: '₹' + vendor.monthEarnings.toLocaleString('en-IN') },
+            { label: 'Total Jobs', value: store.completedJobsCount.toString() },
+            { label: 'This Month', value: '₹' + store.totalEarnings.toLocaleString('en-IN') },
             { label: 'Rating', value: vendor.rating.toString() + ' ⭐' },
           ].map(s => (
             <View key={s.label} style={styles.statBox}>

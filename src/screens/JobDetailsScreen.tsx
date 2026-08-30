@@ -56,7 +56,7 @@ export default function JobDetailsScreen({ route, navigation }: any) {
     switch (job.status) {
       case 'NEW_REQUEST':
         try {
-          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name, store.vendor.mobile);
+          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name, store.vendor.mobile, store.vendor.avatar);
           store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
         } catch (e: any) { Alert.alert('Error', e.message); }
         break;
@@ -70,7 +70,7 @@ export default function JobDetailsScreen({ route, navigation }: any) {
 
       case 'ADMIN_ASSIGNED':
         try {
-          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name, store.vendor.mobile);
+          await acceptJob(job.bookingId, store.vendorId!, store.vendor.name, store.vendor.mobile, store.vendor.avatar);
           store.updateJobStatus(jobId, 'ACCEPTED', { acceptedAt: Date.now() });
         } catch (e: any) { Alert.alert('Error', e.message); }
         break;
