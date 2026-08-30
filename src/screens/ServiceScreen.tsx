@@ -9,9 +9,8 @@ import { store } from '../store/AppStore';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 import { updateBookingStatus, updateBookingAudio } from '../services/firestoreService';
 import { updateDoc, doc } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
 import * as FileSystem from "expo-file-system/legacy";
-import { db, storage } from "../services/firebase";
+import { db } from "../services/firebase";
 import { Audio } from 'expo-av';
 
 function formatTime(secs: number) {
@@ -90,29 +89,22 @@ export default function ServiceScreen({ route, navigation }: any) {
         await recording.stopAndUnloadAsync();
         const uri = recording.getURI();
         if (uri && job) {
-          // React Native's Blob and ArrayBuffer are broken.
-          // We bypass the Firebase JS SDK and upload natively using Expo FileSystem and Firebase REST API.
-          const auth = getAuth();
-          const token = auth.currentUser ? await auth.currentUser.getIdToken() : '';
+          // Upload directly to Cloudinary using MULTIPART to bypass Firebase Storage entirely
+          const cloudinaryUrl = "https://api.cloudinary.com/v1_1/kzqaiull/video/upload";
           
-          const fileName = `recordings/${job.bookingId}_${Date.now()}.m4a`;
-          const storageBucket = "urban-helpers-admin.firebasestorage.app";
-          const uploadUrl = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o?name=${encodeURIComponent(fileName)}`;
-
-          const response = await FileSystem.uploadAsync(uploadUrl, uri, {
+          const response = await FileSystem.uploadAsync(cloudinaryUrl, uri, {
             httpMethod: 'POST',
-            uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-            headers: {
-              'Content-Type': 'audio/m4a',
-              ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            uploadType: FileSystem.FileSystemUploadType.MULTIPART,
+            fieldName: 'file',
+            parameters: {
+              upload_preset: 'Urban Helpers',
             },
           });
 
           if (response.status === 200) {
             const data = JSON.parse(response.body);
-            const downloadUrl = `https://firebasestorage.googleapis.com/v0/b/${storageBucket}/o/${encodeURIComponent(fileName)}?alt=media&token=${data.downloadTokens}`;
-            
-            await updateBookingAudio(job.bookingId, downloadUrl);
+            // Save the secure Cloudinary URL to Firestore
+            await updateBookingAudio(job.bookingId, data.secure_url);
             Alert.alert("Success", "Audio recording uploaded successfully!");
           } else {
             throw new Error(`Upload failed with status ${response.status}: ${response.body}`);
