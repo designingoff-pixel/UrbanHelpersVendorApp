@@ -8,9 +8,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { store } from '../store/AppStore';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 import { updateBookingStatus, updateBookingAudio } from '../services/firestoreService';
+import { updateDoc, doc } from "firebase/firestore";
+import { ref, getDownloadURL, uploadString } from "firebase/storage";
+import * as FileSystem from "expo-file-system";
+import { db, storage } from "../services/firebase";
 import { Audio } from 'expo-av';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../services/firebase';
 
 function formatTime(secs: number) {
   const h = Math.floor(secs / 3600);
@@ -88,17 +90,10 @@ export default function ServiceScreen({ route, navigation }: any) {
         await recording.stopAndUnloadAsync();
         const uri = recording.getURI();
         if (uri && job) {
-          // Use XMLHttpRequest instead of fetch for local file URIs on React Native Android
-          const blob: any = await new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.onload = function () { resolve(xhr.response); };
-            xhr.onerror = function (e) { reject(new TypeError("Network request failed")); };
-            xhr.responseType = "blob";
-            xhr.open("GET", uri, true);
-            xhr.send(null);
-          });
+          // Read file as Base64 string to completely bypass React Native blob corruption
+          const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
           const audioRef = ref(storage, `recordings/${job.bookingId}_${Date.now()}.m4a`);
-          await uploadBytes(audioRef, blob);
+          await uploadString(audioRef, base64, 'base64', { contentType: 'audio/m4a' });
           const downloadUrl = await getDownloadURL(audioRef);
           await updateBookingAudio(job.bookingId, downloadUrl);
           Alert.alert("Success", "Audio recording uploaded successfully!");
