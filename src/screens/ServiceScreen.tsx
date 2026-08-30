@@ -10,7 +10,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 import { updateBookingStatus, updateBookingAudio } from '../services/firestoreService';
 import { updateDoc, doc } from "firebase/firestore";
 import { ref, getDownloadURL, uploadString } from "firebase/storage";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { db, storage } from "../services/firebase";
 import { Audio } from 'expo-av';
 
