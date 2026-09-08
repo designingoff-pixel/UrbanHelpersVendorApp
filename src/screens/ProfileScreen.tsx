@@ -6,16 +6,41 @@ import { Ionicons } from '@expo/vector-icons';
 import { store } from '../store/AppStore';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
 
+import { signOut } from 'firebase/auth';
+import { auth } from '../services/firebase';
+
 export default function ProfileScreen({ navigation }: any) {
   const [sosVisible, setSosVisible] = useState(false);
   const { vendor } = store;
+
+  const handleLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to log out?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Logout',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await signOut(auth);
+          } catch (err) {
+            console.warn('SignOut error:', err);
+          }
+          store.setFirebaseUser('', '', '');
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+        },
+      },
+    ]);
+  };
 
   const menuItems = [
     { icon: 'create-outline', label: 'Edit Profile', onPress: () => navigation.navigate('EditProfile') },
     { icon: 'document-text-outline', label: 'Documents', onPress: () => Alert.alert('Coming Soon', 'Document management coming soon.') },
     { icon: 'help-circle-outline', label: 'Support', onPress: () => Alert.alert('Support', 'Call us: 1800-XXX-XXXX\nEmail: support@urbancaptain.com') },
     { icon: 'settings-outline', label: 'Settings', onPress: () => Alert.alert('Coming Soon', 'Settings will be available in the next release.') },
-    { icon: 'log-out-outline', label: 'Logout', onPress: () => { Alert.alert('Logout', 'Are you sure?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Logout', style: 'destructive', onPress: () => navigation.replace('Login') }]); }, danger: true },
+    { icon: 'log-out-outline', label: 'Logout', onPress: handleLogout, danger: true },
   ];
 
   return (

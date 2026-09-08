@@ -1,11 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, Platform,
+  SafeAreaView, Platform, ActivityIndicator,
 } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../services/firebase';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeScreen from '../screens/HomeScreen';
@@ -90,9 +93,53 @@ function MainTabsScreen({ navigation }: any) {
 
 // ── Root Navigator ─────────────────────────────────────────────────────────
 export default function AppNavigator() {
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [initialRoute, setInitialRoute] = useState<'Login' | 'MainTabs'>('Login');
+
+  useEffect(() => {
+    let timeout = setTimeout(() => {
+      setCheckingAuth(false);
+    }, 2500);
+
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      clearTimeout(timeout);
+      if (firebaseUser) {
+        try {
+          const snap = await getDoc(doc(db, 'vendors', firebaseUser.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            store.setFirebaseUser(firebaseUser.uid, data.name ?? 'Vendor', data.mobile ?? '');
+          } else {
+            store.setFirebaseUser(firebaseUser.uid, 'Vendor', '');
+          }
+        } catch (e) {
+          console.warn('[AppNavigator] Error fetching vendor profile:', e);
+          store.setFirebaseUser(firebaseUser.uid, 'Vendor', '');
+        }
+        setInitialRoute('MainTabs');
+      } else {
+        setInitialRoute('Login');
+      }
+      setCheckingAuth(false);
+    });
+
+    return () => {
+      clearTimeout(timeout);
+      unsub();
+    };
+  }, []);
+
+  if (checkingAuth) {
+    return (
+      <View style={{ flex: 1, backgroundColor: Colors.midnightNavy, justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Navigator initialRouteName={initialRoute} screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login"         component={LoginScreen} />
         <Stack.Screen name="MainTabs"      component={MainTabsScreen} />
         <Stack.Screen name="JobDetails"    component={JobDetailsScreen} />
