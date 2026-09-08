@@ -248,7 +248,9 @@ export async function verifyOTP(
   if (!snap.exists()) return false;
 
   const booking = snap.data() as FirestoreBooking;
-  const correct  = booking.otp === enteredOTP;
+  const storedOtp = String(booking.otp || '').trim();
+  const inputOtp = String(enteredOTP || '').trim();
+  const correct  = storedOtp === inputOtp || (Boolean(storedOtp) && parseInt(storedOtp, 10) === parseInt(inputOtp, 10));
 
   if (correct) {
     // OTP verified — start service

@@ -10,8 +10,7 @@ import StatusBadge from '../components/StatusBadge';
 import { Job } from '../data/types';
 import { SERVICE_ICONS } from '../data/mockData';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../theme';
-import {
-  updateBookingStatus,
+import { updateBookingStatus, notifyCustomerOTP,
   acceptJob,
   rejectJob,
   BookingStatus,
@@ -79,6 +78,10 @@ export default function JobDetailsScreen({ route, navigation }: any) {
         try {
           await updateBookingStatus(job.bookingId, 'arrived');
           store.updateJobStatus(jobId, 'ARRIVED', { arrivedAt: Date.now() });
+          // Notify customer with push notification containing the OTP
+          if (job.customerId && job.otp) {
+            notifyCustomerOTP(job.customerId, String(job.otp)).catch(console.warn);
+          }
           Alert.alert("You've Arrived!", 'Please verify the customer OTP.');
         } catch (e: any) { Alert.alert('Error', e.message); }
         break;

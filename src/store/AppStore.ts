@@ -178,8 +178,7 @@ class AppStore {
   getJobsForTab(tab: string): Job[] {
     const map: Record<string, JobStatus[]> = {
       requests: ['NEW_REQUEST'],
-      upcoming: ['ACCEPTED', 'ADMIN_ASSIGNED', 'UPCOMING'],
-      active: ['NAVIGATING', 'ARRIVED', 'OTP_PENDING', 'CUSTOMER_VERIFIED', 'SERVICE_STARTED', 'RECORDING_ACTIVE', 'RECORDING_STOPPED'],
+      active: ['ACCEPTED', 'ADMIN_ASSIGNED', 'UPCOMING', 'NAVIGATING', 'ARRIVED', 'OTP_PENDING', 'CUSTOMER_VERIFIED', 'SERVICE_STARTED', 'RECORDING_ACTIVE', 'RECORDING_STOPPED'],
       completed: ['COMPLETED', 'REJECTED', 'CANCELLED'],
     };
     return this.jobs.filter(j => (map[tab] || []).includes(j.status));

@@ -8,7 +8,7 @@ import { Colors, Typography, Spacing, Radius } from '../theme';
 
 const TABS = [
   { key: 'requests', label: 'Requests' },
-  { key: 'upcoming', label: 'Upcoming' },
+
   { key: 'active', label: 'Active' },
   { key: 'completed', label: 'Completed' },
 ];
